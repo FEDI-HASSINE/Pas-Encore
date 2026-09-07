@@ -1,0 +1,6 @@
+simpy>=4.1.0
+pydantic>=2.7
+numpy>=1.26
+matplotlib>=3.8
+pyyaml>=6.0
+skyfield>=1.48
