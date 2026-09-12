@@ -38,13 +38,22 @@ class RadiationModel:
         """
         Return a random time until a radiation event.
 
-        The project requires:
-            scale = characteristic_dose / 0.01
+        Uses the conditional model: accounts for the accumulated
+        dose so that the remaining time is based on the dose
+        still needed to reach the characteristic threshold.
+
+            remaining_dose = characteristic_dose - cumulative_dose
+            scale = remaining_dose / 0.01
         """
         if characteristic_dose <= 0:
             raise ValueError("characteristic_dose must be > 0")
 
-        scale = characteristic_dose / self.DOSE_RATE
+        remaining_dose = max(0.0, characteristic_dose - self.cumulative_dose)
+
+        if remaining_dose == 0:
+            return 0.0
+
+        scale = remaining_dose / self.DOSE_RATE
 
         return float(self.rng.exponential(scale=scale))
 
@@ -64,6 +73,15 @@ class RadiationModel:
         """Reset cumulative dose."""
         self.cumulative_dose = 0.0
 
-    @staticmethod
-    def characteristic_dose(mode: FailureMode) -> float:
-        return RadiationModel.CHARACTERISTIC_DOSES[mode]
+    def next_failure(self) -> tuple[FailureMode, float]:
+        """
+        Return (mode, time) of the next failure among all modes.
+
+        Samples time-to-failure for each mode and returns the
+        one that would occur first.
+        """
+        candidates = [
+            (mode, self.time_to_failure(dose))
+            for mode, dose in self.CHARACTERISTIC_DOSES.items()
+        ]
+        return min(candidates, key=lambda x: x[1])

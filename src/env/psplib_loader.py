@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _split_fields(line: str) -> list[str]:
@@ -27,6 +30,9 @@ def load_psplib(path: str | Path) -> list[dict[str, Any]]:
     """
     Load one PSPLIB instance.
 
+    Returns only the 30 real tasks (supersource and supersink
+    are excluded).
+
     Returned schema:
 
         {
@@ -44,10 +50,16 @@ def load_psplib(path: str | Path) -> list[dict[str, Any]]:
             f"PSPLIB file not found: {path}"
         )
 
-    lines = path.read_text(
+    content = path.read_text(
         encoding="utf-8",
         errors="ignore"
-    ).replace("\x00", "").splitlines()
+    )
+
+    if "\x00" in content:
+        logger.warning("Null bytes detected in %s", path)
+        content = content.replace("\x00", "")
+
+    lines = content.splitlines()
 
     # =========================================================
     # 1. PRECEDENCE RELATIONS
@@ -143,10 +155,19 @@ def load_psplib(path: str | Path) -> list[dict[str, Any]]:
 
         i += 1
 
-    return [
-        tasks[job_id]
-        for job_id in sorted(tasks)
+    # =========================================================
+    # 3. FILTER OUT SUPERSOURCE / SUPERSINK
+    # =========================================================
+    # Supersource (job 1) and supersink (last job) have
+    # duration == 0 and resources == all zeros. They are
+    # PSPLIB structural dummies, not real schedulable tasks.
+
+    real_tasks = [
+        t for t in tasks.values()
+        if t["duration"] > 0 or t["resources"] != [0] * len(t["resources"])
     ]
+
+    return sorted(real_tasks, key=lambda t: t["id"])
 
 
 def load_all_psplib(
@@ -156,11 +177,11 @@ def load_all_psplib(
     Load all PSPLIB .sm instances from a directory.
 
     Returns a dictionary mapping each filename to its
-    parsed task list.
+    parsed task list (30 real tasks per instance).
 
         {
             "j3010_1.sm": [
-                {"id": 1, "duration": 0, ...},
+                {"id": 2, "duration": 2, ...},
                 ...
             ],
             "j3010_2.sm": [...],

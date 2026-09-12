@@ -10,15 +10,22 @@ Dynamic Workload Allocation Between Space and Ground.
 Stochastic radiation failure model using an exponential distribution.
 
 - Three failure modes: **SDC** (17 rad), **HBM** (44 rad), **SEFI** (5000 rad)
+- Conditional model: `time_to_failure` accounts for accumulated dose
 - Cumulative dose tracking (dose rate = 0.01 rad/s)
+- `next_failure()` returns the earliest failure among all modes
 - Reproducible via fixed random seed
 
 ```python
 from src.env.radiation import RadiationModel, FailureMode
 
 model = RadiationModel(seed=42)
-model.time_to_failure(17.0)   # random time to SDC event
-model.add_exposure(100)       # cumulative_dose → 1.0 rad
+
+# Time to failure (conditional on accumulated dose)
+model.add_exposure(1000)       # 10 rad accumulated
+model.time_to_failure(17.0)    # remaining 7 rad → mean ≈ 700 s
+
+# Next failure among all modes
+mode, time = model.next_failure()
 ```
 
 ---
@@ -31,7 +38,7 @@ Extracts:
 - **PRECEDENCE RELATIONS** — converts successors → predecessor lists
 - **REQUESTS/DURATIONS** — extracts duration and resource demands
 
-Returns a **list of dictionaries** with keys: `id`, `duration`, `predecessors`, `resources`.
+Returns a **list of 30 dictionaries** (supersource/supersink excluded) with keys: `id`, `duration`, `predecessors`, `resources`.
 
 #### Usage — single instance
 
@@ -40,8 +47,8 @@ from src.env.psplib_loader import load_psplib
 
 tasks = load_psplib("data/j3010_1.sm")
 # [
-#     {"id": 1, "duration": 0, "predecessors": [], "resources": [0, 0, 0, 0]},
 #     {"id": 2, "duration": 2, "predecessors": [1], "resources": [1, 2, 4, 0]},
+#     {"id": 3, "duration": 5, "predecessors": [1], "resources": [0, 5, 9, 10]},
 #     ...
 # ]
 ```
@@ -55,12 +62,11 @@ all_data = load_all_psplib("data")
 # {"j3010_1.sm": [...], "j3010_2.sm": [...], ...}
 ```
 
-#### Parsed output file
+#### Generate parsed JSON (not committed to Git)
 
-All 480 instances pre-parsed as JSON:
-
-```
-data/j30_all_parsed.json
+```bash
+python scripts/build_j30_json.py
+# → data/j30_all_parsed.json
 ```
 
 ---
@@ -68,11 +74,10 @@ data/j30_all_parsed.json
 ## Project Structure
 
 ```
-├── data/                      # 480 extracted PSPLIB J30 instances (.sm)
-│   ├── j3010_1.sm             # Instance 1
-│   ├── j3010_2.sm             # Instance 2
-│   ├── ...                    # (480 total)
-│   └── j30_all_parsed.json    # All instances parsed as JSON
+├── data/                      # 480 PSPLIB J30 instances (.sm)
+│   ├── j3010_1.sm
+│   ├── j3010_2.sm
+│   └── ...                    # (480 total)
 │
 ├── src/
 │   └── env/
@@ -80,10 +85,14 @@ data/j30_all_parsed.json
 │       └── psplib_loader.py   # M3 — PSPLIB parser
 │
 ├── tests/
-│   └── test_psplib_loader.py  # M3 tests (6 tests)
+│   ├── test_radiation.py      # M2 tests (9 tests)
+│   └── test_psplib_loader.py  # M3 tests (10 tests)
 │
-├── src/tests/
-│   └── test_radiation.py      # M2 tests (4 tests)
+├── scripts/
+│   └── build_j30_json.py     # Generate j30_all_parsed.json
+│
+├── docs/
+│   └── explanation.md         # Technical explanation
 │
 ├── requirements.txt
 └── README.md
@@ -102,6 +111,5 @@ pip install -r requirements.txt
 ## Run Tests
 
 ```bash
-pytest tests/ -v              # M3 PSPLIB tests
-pytest src/tests/ -v          # M2 Radiation tests
+pytest tests/ -v
 ```

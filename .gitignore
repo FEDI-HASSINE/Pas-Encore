@@ -6,3 +6,5 @@ __pycache__/
 *.png
 results/
 .DS_Store
+.pytest_cache/
+data/*.json
