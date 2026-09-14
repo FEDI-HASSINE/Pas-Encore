@@ -5,7 +5,16 @@ Run as a script:
 """
 
 import logging
+import sys
+from pathlib import Path
+
 import simpy
+
+# Ensure the repository root is on sys.path so `src.*` imports work
+# whether the script is run as `python src/orchestrator.py` or via pytest.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from src.strategies.base import AllocationStrategy, AllocationDecision
 
