@@ -42,6 +42,18 @@ class Node(BaseModel):
         default_factory=list,
         description="List of tasks currently executing on this node",
     )
+    node_type: str = Field(
+        default="",
+        description="Node type (Orbital Satellite, Ground Station, Terrestrial Cloud)",
+    )
+    startup_penalty: float = Field(
+        default=0.0,
+        description="Startup energy penalty",
+    )
+    sensor_noise: float = Field(
+        default=0.0,
+        description="Sensor telemetry noise percentage",
+    )
 
     def __init__(
         self,
