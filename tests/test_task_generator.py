@@ -193,3 +193,66 @@ class TestAllProfiles:
                     f"Profile '{profile_name}', task '{t.get('id', '?')}' "
                     f"missing fields: {missing}"
                 )
+
+
+# ========================================================================
+# New Tests for Issue 4: Schema preserves optional fields
+# ========================================================================
+
+class TestSchemaPreservesOptionalFields:
+
+    def test_task_schema_preserves_energy_budget(self):
+        """Task schema preserves energy_budget field."""
+        t = Task(
+            id="t",
+            arrival_time=0.0,
+            cpu_units=1.0,
+            ram_units=1.0,
+            energy_budget=75.0,
+        )
+        assert t.energy_budget == 75.0
+
+    def test_task_schema_preserves_deadline(self):
+        """Task schema preserves deadline field."""
+        t = Task(
+            id="t",
+            arrival_time=0.0,
+            cpu_units=1.0,
+            ram_units=1.0,
+            deadline=0.1,
+        )
+        assert t.deadline == 0.1
+
+    def test_task_schema_preserves_failure_mode(self):
+        """Task schema preserves failure_mode field."""
+        t = Task(
+            id="t",
+            arrival_time=0.0,
+            cpu_units=1.0,
+            ram_units=1.0,
+            failure_mode="HBM",
+        )
+        assert t.failure_mode == "HBM"
+
+    def test_task_schema_preserves_failure_time(self):
+        """Task schema preserves failure_time field."""
+        t = Task(
+            id="t",
+            arrival_time=0.0,
+            cpu_units=1.0,
+            ram_units=1.0,
+            failure_time=1234.5,
+        )
+        assert t.failure_time == 1234.5
+
+
+# ========================================================================
+# New Test for Issue 3: Config loader
+# ========================================================================
+
+class TestConfigLoader:
+
+    def test_generate_burst_reads_from_config(self):
+        """generate_burst() reads n_tasks from config when n=None."""
+        tasks = generate_burst()  # no explicit n, must read from config
+        assert len(tasks) == 150
