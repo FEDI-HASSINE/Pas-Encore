@@ -54,8 +54,6 @@ class Task(BaseModel):
     start_time: Optional[float] = None
     completion_time: Optional[float] = None
 
-<<<<<<< HEAD
-=======
     # --- Profile-specific optional metadata ---
     # Populated by src/env/task_generator.py for the Energy, Mixed,
     # and Radiation profiles. Consumed by the orchestrator and the
@@ -65,7 +63,6 @@ class Task(BaseModel):
     failure_mode: Optional[str] = None
     failure_time: Optional[float] = None
 
->>>>>>> 0e2a8f61881414aad4ed65106a5528d33b79c2f9
 
 class NodeState(BaseModel):
     """Plain data snapshot of a node's state.
