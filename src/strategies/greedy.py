@@ -8,15 +8,74 @@ The score is based on three criteria defined by the project specification:
     - estimated energy consumption,
     - communication latency.
 
-The three criteria are equally weighted. This weighting is an implementation
-choice because the project specification defines the criteria but does not
-prescribe exact weights.
+The weights follow the roadmap specification (docs/01_PROJECT_DESCRIPTION.md,
+Section 3.2): CPU=0.4, Energy=0.4, Communication=0.2.
 """
 
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+from typing import Any
+
+import yaml
+
 from src.schemas import AllocationDecision, Task
 from src.strategies.base import AllocationStrategy
+
+
+# ---------------------------------------------------------------------------
+# Module-level constants with config fallback
+# ---------------------------------------------------------------------------
+
+_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "experiment.yaml"
+
+_DEFAULT_GREEDY_WEIGHTS = {
+    "weight_cpu": 0.4,
+    "weight_energy": 0.4,
+    "weight_communication": 0.2,
+    "bits_per_byte": 8.0,
+}
+
+_GREEDY_WEIGHTS_CACHE: dict[str, float] | None = None
+
+
+def _load_greedy_weights() -> dict[str, float]:
+    """Load greedy strategy weights from config/experiment.yaml with fallback."""
+    global _GREEDY_WEIGHTS_CACHE
+
+    if _GREEDY_WEIGHTS_CACHE is None:
+        try:
+            if _CONFIG_PATH.exists():
+                with open(_CONFIG_PATH, "r") as f:
+                    data = yaml.safe_load(f) or {}
+                _GREEDY_WEIGHTS_CACHE = data.get("strategies", {}).get("greedy", {})
+            else:
+                _GREEDY_WEIGHTS_CACHE = {}
+                logging.warning(
+                    "Config file not found at %s, using hardcoded greedy defaults",
+                    _CONFIG_PATH,
+                )
+        except Exception as e:
+            _GREEDY_WEIGHTS_CACHE = {}
+            logging.warning(
+                "Failed to load greedy config from %s: %s, using hardcoded defaults",
+                _CONFIG_PATH,
+                e,
+            )
+
+    # Merge with defaults (defaults take precedence for missing keys)
+    merged = {**_DEFAULT_GREEDY_WEIGHTS, **_GREEDY_WEIGHTS_CACHE}
+    return merged
+
+
+# Load weights at module import time
+_WEIGHTS = _load_greedy_weights()
+WEIGHT_CPU = _WEIGHTS["weight_cpu"]
+WEIGHT_ENERGY = _WEIGHTS["weight_energy"]
+WEIGHT_COMMUNICATION = _WEIGHTS["weight_communication"]
+BITS_PER_BYTE = _WEIGHTS["bits_per_byte"]
 
 
 class GreedyStrategy(AllocationStrategy):
@@ -79,16 +138,18 @@ class GreedyStrategy(AllocationStrategy):
         task: Task,
         current_time: float,
     ) -> float:
-        """Estimate communication time from the node's active links.
+        """Estimate communication cost for a task.
 
-        Task currently has no source-node field, so an exact end-to-end
-        communication latency cannot be calculated.
+        LIMITATION: The current Task schema has no source_node field, so
+        this is a deterministic approximation based on data_size_mb and
+        the best active link bandwidth at the candidate node. It is NOT
+        an end-to-end source->destination latency model.
 
-        As a deterministic approximation, use the best currently active
-        link connected to the candidate node.
+        Future work (Phase 3): add a source_node field to Task and compute
+        the actual path cost.
 
         Estimated transmission time:
-            data_size_mb * 8 / bandwidth_mbps
+            data_size_mb * BITS_PER_BYTE / bandwidth_mbps
 
         A node without an active communication link receives infinite
         communication cost.
@@ -109,8 +170,11 @@ class GreedyStrategy(AllocationStrategy):
 
         best_bandwidth = max(active_bandwidths)
 
+        if best_bandwidth <= 0:
+            return float("inf")
+
         return (
-            task.data_size_mb * 8.0
+            task.data_size_mb * BITS_PER_BYTE
         ) / best_bandwidth
 
     def allocate(
@@ -145,6 +209,10 @@ class GreedyStrategy(AllocationStrategy):
         cpu_costs = {}
 
         for node in available_nodes:
+            if node.cpu_capacity <= 0:
+                cpu_costs[node.id] = float("inf")
+                continue
+
             projected_cpu_load = (
                 node.cpu_utilized + task.cpu_units
             ) / node.cpu_capacity
@@ -199,10 +267,8 @@ class GreedyStrategy(AllocationStrategy):
         # -------------------------------------------------------------
         # Composite suitability score
         # -------------------------------------------------------------
-        # Equal weighting:
-        #   CPU           = 1/3
-        #   Energy        = 1/3
-        #   Communication = 1/3
+        # Weights follow the roadmap specification (docs/01_PROJECT_DESCRIPTION.md,
+        # Section 3.2): CPU=0.4, Energy=0.4, Communication=0.2.
         #
         # Higher final score is better.
         scores = {}
@@ -211,10 +277,10 @@ class GreedyStrategy(AllocationStrategy):
             node_id = node.id
 
             scores[node_id] = (
-                cpu_suitability[node_id]
-                + energy_suitability[node_id]
-                + communication_suitability[node_id]
-            ) / 3.0
+                WEIGHT_CPU * cpu_suitability[node_id]
+                + WEIGHT_ENERGY * energy_suitability[node_id]
+                + WEIGHT_COMMUNICATION * communication_suitability[node_id]
+            )
 
         # -------------------------------------------------------------
         # Greedy decision
