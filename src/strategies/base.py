@@ -1,25 +1,15 @@
 """Allocation strategy interface for the orbital scheduler.
 
-Every strategy (S1 to S5) must inherit from AllocationStrategy and
-implement the `allocate` method.
+Every strategy (S1 to S5) inherits from AllocationStrategy and
+implements the `allocate` method.
 
-NOTE: AllocationDecision is temporarily defined here. Once
-`src/schemas.py` is published by M2, this class MUST be removed and
-imported from `src.schemas` instead. Do not duplicate it elsewhere.
+AllocationDecision is imported from src.schemas — do NOT redefine it
+locally.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
-
-@dataclass
-class AllocationDecision:
-    """Result of a routing decision."""
-
-    task_id: str
-    chosen_node_id: str
-    score: float | None = None
-    reason: str = ""
+from src.schemas import AllocationDecision
 
 
 class AllocationStrategy(ABC):
@@ -30,7 +20,8 @@ class AllocationStrategy(ABC):
         """Choose a node to execute the given task.
 
         Args:
-            task: The task to allocate.
+            task: The task to allocate (src.schemas.Task once available;
+                  duck-typed until then).
             current_time: Current simulation time (SimPy env.now).
 
         Returns:
