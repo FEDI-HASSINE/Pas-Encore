@@ -42,6 +42,7 @@ class Orchestrator:
         pending_store: simpy.Store,
         strategy: AllocationStrategy,
         nodes: dict,
+        sampling_interval: float = 1.0,
     ) -> None:
         self.env = env
         self.pending_store = pending_store
@@ -49,6 +50,8 @@ class Orchestrator:
         self.nodes = nodes
         self.decision_count = 0
         self.completed_tasks: list[Task] = []
+        self.utilization_samples: list[dict] = []
+        self.sampling_interval: float = sampling_interval
 
     def run(self):
         """Main orchestration loop."""
@@ -87,6 +90,28 @@ class Orchestrator:
             task.completion_time = self.env.now
             task.assigned_node = node.id
             self.completed_tasks.append(task)
+
+    def sample_utilization(self):
+        """Periodically record CPU utilization of all nodes."""
+        while True:
+            sample = {
+                node_id: node.cpu_utilized / node.cpu_capacity
+                if node.cpu_capacity > 0 else 0.0
+                for node_id, node in self.nodes.items()
+            }
+            self.utilization_samples.append(sample)
+            yield self.env.timeout(self.sampling_interval)
+
+    def average_utilization(self) -> dict:
+        """Return average utilization per node over the simulation."""
+        if not self.utilization_samples:
+            return {nid: 0.0 for nid in self.nodes}
+        totals = {nid: 0.0 for nid in self.nodes}
+        for sample in self.utilization_samples:
+            for nid, val in sample.items():
+                totals[nid] += val
+        n = len(self.utilization_samples)
+        return {nid: totals[nid] / n for nid in self.nodes}
 
 
 def task_arrival(env: simpy.Environment, pending_store: simpy.Store,

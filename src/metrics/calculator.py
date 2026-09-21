@@ -70,6 +70,21 @@ def compute_ml(nodes: dict) -> float:
     return float(statistics.pstdev(ratios))
 
 
+def compute_ml_from_samples(avg_utilization: dict) -> float:
+    """Compute M_L from average per-node utilizations.
+
+    Args:
+        avg_utilization: dict[node_id -> float]
+
+    Returns:
+        Standard deviation of the utilization values.
+    """
+    ratios = list(avg_utilization.values())
+    if len(ratios) < 2:
+        return 0.0
+    return float(statistics.pstdev(ratios))
+
+
 def compute_mr(completed: int, orphaned: int) -> float:
     """Compute the resilience metric M_R.
 

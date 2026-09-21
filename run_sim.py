@@ -37,7 +37,7 @@ from src.env.task_generator import (
     generate_mixed,
 )
 from src.env.topology import build_topology
-from src.metrics.calculator import compute_all
+from src.metrics.calculator import compute_all, compute_ml_from_samples
 from src.orchestrator import Orchestrator
 from src.schemas import Task, TaskState
 from src.strategies.s1_always_ground import AlwaysGroundStrategy
@@ -239,6 +239,7 @@ Examples:
 
     orchestrator = Orchestrator(env, pending_store, strategy, nodes)
     env.process(orchestrator.run())
+    env.process(orchestrator.sample_utilization())
     env.process(feed_tasks(env, pending_store, raw_tasks, strategy_name))
 
     # --- 5. Determine simulation duration ---
@@ -260,6 +261,8 @@ Examples:
         total_energy=0.0,
         total_transmission=0.0,
     )
+    avg_util = orchestrator.average_utilization()
+    metrics["M_L"] = compute_ml_from_samples(avg_util)
 
     logger.info("=" * 60)
     logger.info("Simulation completed at t=%.1f", env.now)
