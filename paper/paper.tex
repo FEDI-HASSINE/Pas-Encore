@@ -96,6 +96,48 @@ Our framework operationalizes two critical internal components developed in para
 
 The \textbf{external benchmark pipeline} (M3) integrates three real-world data sources: (i) PSPLIB \cite{psplib} J30 instances (480 task graphs with precedence constraints, durations, and resource demands), parsed into a standardized task dictionary format (id, duration, predecessors, resources); (ii) Google Borg cluster traces \cite{google-traces}, providing autocorrelated arrival timestamps that capture real-world burstiness; (iii) Skyfield \cite{skyfield} orbital mechanics, computing LEO-ground visibility windows from TLE data rather than using synthetic periodic windows. These benchmarks are combined into a \textit{merged scenario} for Phase 3 validation, while the four synthetic profiles remain the primary evaluation basis for statistical interpretability. The PSPLIB parser (M3) converts successor lists to predecessor lists, ensuring compatibility with the scheduler's dependency-checking logic.
 
+\section{Methodology}
+\label{sec:methodology}
+
+This section describes the simulated environment, the allocation strategies, and the evaluation metrics. It contains no experimental results.
+
+\subsection{System Architecture}
+\label{sec:architecture}
+
+The simulated topology contains four heterogeneous compute nodes: LEO-1, LEO-2, GS-Tunisia, and Cloud-AWS. Each LEO satellite provides 10 CPU units and 32 RAM units with a high startup energy penalty; GS-Tunisia provides 20 CPU units and 64 RAM units with a moderate startup penalty; Cloud-AWS provides 100 CPU units and 256 RAM units with no startup penalty. The simulator is implemented as a SimPy discrete-event model: \texttt{build\_topology()} creates the nodes and links, arriving tasks wait in \texttt{pending\_store}, and the orchestrator repeatedly invokes \texttt{strategy.allocate(task, current\_time)} to select an execution node.
+
+The four communication links are LEO-1~$\leftrightarrow$~GS-Tunisia, LEO-2~$\leftrightarrow$~GS-Tunisia, GS-Tunisia~$\leftrightarrow$~Cloud-AWS, and the LEO-1~$\leftrightarrow$~LEO-2 inter-satellite link. The LEO-ground links provide 10 Mbps during 600-second visibility windows every 5400 seconds, offset between the two satellites; the terrestrial and inter-satellite links provide 100 Mbps and 50 Mbps, respectively, and remain available.
+
+\subsection{Allocation Strategies}
+\label{sec:strategies}
+
+We compare five allocation strategies through a common abstract interface. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification:
+\begin{equation}
+    \mathrm{Score} = 0.4 \times \mathrm{CPU}_{\mathrm{suitability}} + 0.4 \times \mathrm{Energy}_{\mathrm{suitability}} + 0.2 \times \mathrm{Communication}_{\mathrm{suitability}}.
+\end{equation}
+S4 is the planned Dynamic Resilient Scheduler for Phase 3, adding failure detection and re-scheduling of orphaned tasks. S5 is the planned Reinforcement Learning Agent for Phase 3, using PPO/DQN through Stable-Baselines3 \cite{stable-baselines3}.
+
+\subsection{Evaluation Metrics}
+\label{sec:metrics}
+
+We use six metrics. Makespan is $M_T = \max(\mathrm{completion\_time}) - \min(\mathrm{arrival\_time})$. Load balance is $M_L$, the standard deviation of per-node CPU utilization. Resilience is $M_R = \mathrm{completed\_after\_failure} / \mathrm{orphaned}$. Efficiency is $M_E = (\mathrm{energy} + \mathrm{transmission}) / \mathrm{completed}$. Queue instability is $M_Q$, the time-averaged saturation above 0.85. Decision stability is $M_S = \mathrm{migrations} / \mathrm{completed}$. The radiation model \cite{m2-radiation} and PSPLIB integration \cite{m3-psplib} provide stochastic failure realism and dependency-structure realism, respectively.
+
+\section{Experiments and Roadmap}
+\label{sec:experiments}
+
+The synthetic evaluation uses four workload profiles designed to isolate the primary metrics: burst arrivals stress makespan, energy-constrained arrivals stress efficiency, radiation-annotated arrivals stress resilience, and mixed-priority arrivals stress scheduling differentiation. Quantitative results and statistical comparisons will be added after the batch experiments are completed; this section currently documents the experimental design rather than numerical findings.
+
+\subsection{External Benchmarks (Phase 3 Roadmap)}
+\label{sec:external-benchmarks}
+
+While our four synthetic profiles provide complete control over the experimental conditions, we also prepare a secondary validation based on three real-world data sources:
+\begin{itemize}
+    \item \textbf{PSPLIB} \cite{psplib}: standard task graphs with precedence constraints, to validate our scheduler in the RCPSP-hardness regime.
+    \item \textbf{Google Cluster Traces} \cite{google-traces}: real arrival patterns (bursty, autocorrelated) rather than the Poisson assumption used in our synthetic profiles.
+    \item \textbf{Skyfield} \cite{skyfield}: physically grounded orbital visibility windows computed from Two-Line Element (TLE) data, replacing our deterministic link-failure schedule.
+\end{itemize}
+The PSPLIB parser, the Google trace sampler, and the Skyfield stub are already implemented in the repository (\texttt{src/env/}). The merged scenario is scheduled for Phase 3 as a secondary validation.
+
 \section{Conclusion}
 \label{sec:conclusion}
 
