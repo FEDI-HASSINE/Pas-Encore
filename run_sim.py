@@ -37,8 +37,9 @@ from src.env.task_generator import (
     generate_mixed,
 )
 from src.env.topology import build_topology
+from src.metrics.calculator import compute_all
 from src.orchestrator import Orchestrator
-from src.schemas import Task
+from src.schemas import Task, TaskState
 from src.strategies.s1_always_ground import AlwaysGroundStrategy
 from src.strategies.s2_always_orbital import AlwaysOrbitalStrategy
 from src.strategies.greedy import GreedyStrategy
@@ -90,13 +91,23 @@ def build_strategy(strategy_id: int, topology):
         raise ValueError(f"Unknown strategy ID: {strategy_id}. Must be 1, 2, or 3.")
 
 
+
+
+
 # ---------------------------------------------------------------------------
 # Task feeder process
 # ---------------------------------------------------------------------------
 
 def feed_tasks(env: simpy.Environment, store: simpy.Store,
                raw_tasks: list[dict], strategy_name: str):
-    """Convert raw task dicts to Task objects and feed them into the store."""
+    """Convert raw task dicts to Task objects and feed them into the store.
+
+    Args:
+        env: SimPy environment
+        store: Pending task store
+        raw_tasks: List of raw task dicts from generator
+        strategy_name: Name of strategy (for logging)
+    """
     sorted_tasks = sorted(raw_tasks, key=lambda t: t["arrival_time"])
 
     for raw in sorted_tasks:
@@ -125,7 +136,8 @@ def feed_tasks(env: simpy.Environment, store: simpy.Store,
 # ---------------------------------------------------------------------------
 
 def save_results(profile: str, strategy_id: int, seed: int,
-                 orchestrator: Orchestrator, duration: float):
+                 orchestrator: Orchestrator, duration: float,
+                 metrics: dict):
     """Save run results to results/ directory."""
     results_dir = Path("results")
     results_dir.mkdir(exist_ok=True)
@@ -136,12 +148,17 @@ def save_results(profile: str, strategy_id: int, seed: int,
     with open(filename, "a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["Strategy", "Seed", "Decisions", "Duration"])
+            writer.writerow(["Strategy", "Seed", "Decisions", "Duration",
+                             "M_T", "M_L", "M_R", "M_E"])
         writer.writerow([
             STRATEGY_NAMES[strategy_id],
             seed,
             orchestrator.decision_count,
             duration,
+            metrics["M_T"],
+            metrics["M_L"],
+            metrics["M_R"],
+            metrics["M_E"],
         ])
 
     logger.info("Results appended to %s", filename)
@@ -235,18 +252,29 @@ Examples:
     logger.info("Simulation running for %.1f seconds...", sim_duration)
     env.run(until=sim_duration)
 
-    # --- 6. Results ---
+    # --- 6. Compute metrics ---
+    metrics = compute_all(
+        tasks=orchestrator.completed_tasks,
+        nodes=nodes,
+        orphaned_count=0,
+        total_energy=0.0,
+        total_transmission=0.0,
+    )
+
     logger.info("=" * 60)
     logger.info("Simulation completed at t=%.1f", env.now)
     logger.info("Total decisions: %d", orchestrator.decision_count)
+    logger.info("Completed tasks: %d", len(orchestrator.completed_tasks))
     for nid, node in nodes.items():
         logger.info("  %s: cpu_utilized=%.1f / %.1f",
                      nid, node.cpu_utilized, node.cpu_capacity)
+    logger.info("  Metrics: M_T=%.2f, M_L=%.4f, M_R=%.4f, M_E=%.4f",
+                 metrics["M_T"], metrics["M_L"], metrics["M_R"], metrics["M_E"])
     logger.info("=" * 60)
 
     # --- 7. Save CSV ---
     save_results(args.profile, args.strategy, args.seed,
-                 orchestrator, env.now)
+                 orchestrator, env.now, metrics)
 
 
 if __name__ == "__main__":

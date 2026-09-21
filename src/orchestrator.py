@@ -17,7 +17,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from src.env.topology import build_topology
-from src.schemas import AllocationDecision, Task
+from src.schemas import AllocationDecision, Task, TaskState
 from src.strategies.base import AllocationStrategy
 
 
@@ -48,6 +48,7 @@ class Orchestrator:
         self.strategy = strategy
         self.nodes = nodes
         self.decision_count = 0
+        self.completed_tasks: list[Task] = []
 
     def run(self):
         """Main orchestration loop."""
@@ -81,6 +82,11 @@ class Orchestrator:
             yield self.env.timeout(task.cpu_units)
         finally:
             node.cpu_utilized -= task.cpu_units
+            # --- Mark task as completed ---
+            task.state = TaskState.COMPLETED
+            task.completion_time = self.env.now
+            task.assigned_node = node.id
+            self.completed_tasks.append(task)
 
 
 def task_arrival(env: simpy.Environment, pending_store: simpy.Store,
