@@ -167,7 +167,139 @@ def save_results(profile: str, strategy_id: int, seed: int,
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def run_single(
+    profile: str,
+    strategy_id: int,
+    seed: int,
+    duration: float | None = None,
+) -> dict:
+    """Run one simulation and return its metrics/results.
 
+    This exposes the simulation pipeline for automated experiment
+    campaigns while keeping the CLI behaviour in main().
+    """
+
+    if profile not in PROFILE_GENERATORS:
+        raise ValueError(
+            f"Unknown profile: {profile}"
+        )
+
+    if strategy_id not in STRATEGY_NAMES:
+        raise ValueError(
+            f"Unknown strategy: {strategy_id}"
+        )
+
+    # 1. Build topology
+    topology = build_topology()
+    nodes = topology.nodes
+
+    # 2. Generate workload
+    generator = PROFILE_GENERATORS[profile]
+    raw_tasks = generator(seed=seed)
+
+    # 3. Build allocation strategy
+    strategy = build_strategy(
+        strategy_id,
+        topology,
+    )
+
+    strategy_name = STRATEGY_NAMES[
+        strategy_id
+    ]
+
+    # 4. Create simulation
+    env = simpy.Environment()
+    pending_store = simpy.Store(env)
+
+    orchestrator = Orchestrator(
+        env,
+        pending_store,
+        strategy,
+        nodes,
+    )
+
+    env.process(
+        orchestrator.run()
+    )
+
+    env.process(
+        orchestrator.sample_utilization()
+    )
+
+    env.process(
+        feed_tasks(
+            env,
+            pending_store,
+            raw_tasks,
+            strategy_name,
+        )
+    )
+
+    # 5. Determine simulation duration
+    if duration is not None:
+        sim_duration = duration
+    else:
+        max_arrival = (
+            max(
+                task["arrival_time"]
+                for task in raw_tasks
+            )
+            if raw_tasks
+            else 0.0
+        )
+
+        max_cpu = (
+            max(
+                task["cpu_units"]
+                for task in raw_tasks
+            )
+            if raw_tasks
+            else 0.0
+        )
+
+        sim_duration = (
+            max_arrival
+            + max_cpu
+            + 100
+        )
+
+    env.run(
+        until=sim_duration
+    )
+
+    # 6. Compute metrics
+    metrics = compute_all(
+        tasks=orchestrator.completed_tasks,
+        nodes=nodes,
+        orphaned_count=0,
+        total_energy=0.0,
+        total_transmission=0.0,
+    )
+
+    avg_utilization = (
+        orchestrator.average_utilization()
+    )
+
+    metrics["M_L"] = (
+        compute_ml_from_samples(
+            avg_utilization
+        )
+    )
+
+    return {
+        "Profile": profile,
+        "Strategy": strategy_id,
+        "Strategy_Name": strategy_name,
+        "Seed": seed,
+        "M_T": float(metrics["M_T"]),
+        "M_L": float(metrics["M_L"]),
+        "M_R": float(metrics["M_R"]),
+        "M_E": float(metrics["M_E"]),
+        "Completed_Tasks": len(
+            orchestrator.completed_tasks
+        ),
+        "Simulation_Time": float(env.now),
+    }
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
         description="OrbitScheduler Simulation — Dynamic Workload Allocation",
