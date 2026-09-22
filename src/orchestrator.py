@@ -52,6 +52,13 @@ class Orchestrator:
         self.completed_tasks: list[Task] = []
         self.utilization_samples: list[dict] = []
         self.sampling_interval: float = sampling_interval
+        # Per-node wake-up events for capacity queueing. A task waits on
+        # its node's event while the node lacks free CPU, and every
+        # completion wakes the waiters. This cannot block on release
+        # (unlike a Container.put at a float-rounded boundary).
+        self._node_freed: dict[str, simpy.Event] = {
+            node_id: env.event() for node_id in nodes
+        }
 
     def run(self):
         """Main orchestration loop."""
@@ -79,12 +86,34 @@ class Orchestrator:
             self.env.process(self.execute_task(node, task))
 
     def execute_task(self, node, task: Task):
-        """Simulate execution of a task on a node."""
+        """Simulate execution of a task on a node.
+
+        Tasks wait until the node has free CPU capacity, so a saturated
+        node queues subsequent tasks instead of running them all
+        concurrently. Tasks larger than the node capacity (or on a node
+        without positive capacity) run unconstrained to guarantee
+        progress.
+        """
+        node_id = getattr(node, "id", None)
+        capacity = getattr(node, "cpu_capacity", 0.0)
+        gated = (
+            node_id in self._node_freed
+            and capacity > 0
+            and 0 <= task.cpu_units <= capacity
+        )
+        if gated:
+            while node.cpu_utilized + task.cpu_units > capacity + 1e-9:
+                yield self._node_freed[node_id]
         node.cpu_utilized += task.cpu_units
         try:
             yield self.env.timeout(task.cpu_units)
         finally:
             node.cpu_utilized -= task.cpu_units
+            # Wake queued tasks: EVERY completion frees CPU, including
+            # unconstrained (oversized-task) runs that bypass gating.
+            if node_id in self._node_freed:
+                self._node_freed[node_id].succeed()
+                self._node_freed[node_id] = self.env.event()
             # --- Mark task as completed ---
             task.state = TaskState.COMPLETED
             task.completion_time = self.env.now

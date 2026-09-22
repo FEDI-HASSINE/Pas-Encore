@@ -95,6 +95,63 @@ def build_strategy(strategy_id: int, topology):
 
 
 # ---------------------------------------------------------------------------
+# Simulation duration helper
+# ---------------------------------------------------------------------------
+
+def _default_duration(raw_tasks: list[dict], nodes: dict) -> float:
+    """Compute a default duration long enough to drain queued work.
+
+    A task holding ``c`` CPU units runs for ``c`` seconds, so draining
+    everything through the weakest node takes roughly
+    ``sum(cpu**2) / min_capacity`` seconds. Uses that bound plus the
+    latest arrival and a buffer, so queued runs finish completely.
+    """
+    max_arrival = (
+        max(task["arrival_time"] for task in raw_tasks) if raw_tasks else 0.0
+    )
+    total_work = sum(
+        task["cpu_units"] ** 2 for task in raw_tasks
+    )
+    capacities = [
+        node.cpu_capacity for node in nodes.values() if node.cpu_capacity > 0
+    ]
+    min_capacity = min(capacities) if capacities else 1.0
+    return float(max_arrival + total_work / min_capacity + 100.0)
+
+
+# ---------------------------------------------------------------------------
+# Drain helper
+# ---------------------------------------------------------------------------
+
+def _run_until_drained(
+    env,
+    orchestrator: Orchestrator,
+    total_tasks: int,
+    sim_duration: float,
+    max_extra_time: float = 100000.0,
+) -> None:
+    """Run the simulation until every task has completed.
+
+    The fixed ``sim_duration`` may end while queued tasks are still
+    executing. Since every allocated task eventually completes (pools
+    always drain and oversized tasks run unconstrained), keep running
+    in chunks until the completed count reaches the total. The hard
+    cap prevents an infinite loop on pathological inputs.
+    """
+    env.run(until=sim_duration)
+    deadline = sim_duration + max_extra_time
+    while len(orchestrator.completed_tasks) < total_tasks and env.now < deadline:
+        env.run(until=min(env.now + 500.0, deadline))
+    if len(orchestrator.completed_tasks) < total_tasks:
+        logger.warning(
+            "Simulation stopped with %d/%d tasks incomplete at t=%.1f",
+            len(orchestrator.completed_tasks),
+            total_tasks,
+            env.now,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Task feeder process
 # ---------------------------------------------------------------------------
 
@@ -167,7 +224,117 @@ def save_results(profile: str, strategy_id: int, seed: int,
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def run_single(
+    profile: str,
+    strategy_id: int,
+    seed: int,
+    duration: float | None = None,
+) -> dict:
+    """Run one simulation and return its metrics/results.
 
+    This exposes the simulation pipeline for automated experiment
+    campaigns while keeping the CLI behaviour in main().
+    """
+
+    if profile not in PROFILE_GENERATORS:
+        raise ValueError(
+            f"Unknown profile: {profile}"
+        )
+
+    if strategy_id not in STRATEGY_NAMES:
+        raise ValueError(
+            f"Unknown strategy: {strategy_id}"
+        )
+
+    # 1. Build topology
+    topology = build_topology()
+    nodes = topology.nodes
+
+    # 2. Generate workload
+    generator = PROFILE_GENERATORS[profile]
+    raw_tasks = generator(seed=seed)
+
+    # 3. Build allocation strategy
+    strategy = build_strategy(
+        strategy_id,
+        topology,
+    )
+
+    strategy_name = STRATEGY_NAMES[
+        strategy_id
+    ]
+
+    # 4. Create simulation
+    env = simpy.Environment()
+    pending_store = simpy.Store(env)
+
+    orchestrator = Orchestrator(
+        env,
+        pending_store,
+        strategy,
+        nodes,
+    )
+
+    env.process(
+        orchestrator.run()
+    )
+
+    env.process(
+        orchestrator.sample_utilization()
+    )
+
+    env.process(
+        feed_tasks(
+            env,
+            pending_store,
+            raw_tasks,
+            strategy_name,
+        )
+    )
+
+    # 5. Determine simulation duration
+    if duration is not None:
+        sim_duration = duration
+    else:
+        sim_duration = _default_duration(raw_tasks, nodes)
+
+    _run_until_drained(env, orchestrator, len(raw_tasks), sim_duration)
+
+    # 6. Compute metrics
+    metrics = compute_all(
+        tasks=orchestrator.completed_tasks,
+        nodes=nodes,
+        orphaned_count=0,
+        total_energy=0.0,
+        total_transmission=0.0,
+    )
+
+    avg_utilization = (
+        orchestrator.average_utilization()
+    )
+
+    metrics["M_L"] = (
+        compute_ml_from_samples(
+            avg_utilization
+        )
+    )
+
+    return {
+        "Profile": profile,
+        "Strategy": strategy_id,
+        "Strategy_Name": strategy_name,
+        "Seed": seed,
+        "M_T": float(metrics["M_T"]),
+        "M_L": float(metrics["M_L"]),
+        "M_R": float(metrics["M_R"]),
+        "M_E": float(metrics["M_E"]),
+        "Completed_Tasks": len(
+            orchestrator.completed_tasks
+        ),
+        "Simulation_Time": float(env.now),
+        "decisions": orchestrator.decision_count,
+        "duration": float(env.now),
+    }
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
         description="OrbitScheduler Simulation — Dynamic Workload Allocation",
@@ -246,12 +413,10 @@ Examples:
     if args.duration is not None:
         sim_duration = args.duration
     else:
-        max_arrival = max(t["arrival_time"] for t in raw_tasks) if raw_tasks else 0
-        max_cpu = max(t["cpu_units"] for t in raw_tasks) if raw_tasks else 0
-        sim_duration = max_arrival + max_cpu + 100  # buffer
+        sim_duration = _default_duration(raw_tasks, nodes)
 
     logger.info("Simulation running for %.1f seconds...", sim_duration)
-    env.run(until=sim_duration)
+    _run_until_drained(env, orchestrator, len(raw_tasks), sim_duration)
 
     # --- 6. Compute metrics ---
     metrics = compute_all(

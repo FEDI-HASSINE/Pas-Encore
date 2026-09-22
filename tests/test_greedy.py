@@ -32,8 +32,13 @@ def test_greedy_strategy_can_be_created():
     assert strategy.links is links
 
 
-def test_greedy_filters_nodes_without_cpu_capacity():
-    """Nodes without enough remaining CPU must not be candidates."""
+def test_greedy_falls_back_to_least_loaded_when_saturated():
+    """Saturated nodes must not drop the task: queue on least-loaded.
+
+    With every node over capacity, Greedy falls back to the node with
+    the lowest projected utilization (Cloud-AWS here) instead of
+    returning an empty node id.
+    """
     nodes, links = build_topology()
 
     nodes["LEO-1"].cpu_utilized = 9.0
@@ -49,9 +54,9 @@ def test_greedy_filters_nodes_without_cpu_capacity():
         current_time=0.0,
     )
 
-    assert decision.chosen_node_id == ""
-    assert decision.score is None
-    assert "No node" in decision.reason
+    assert decision.chosen_node_id == "Cloud-AWS"
+    assert decision.score is not None
+    assert "fallback" in decision.reason.lower()
 
 
 def test_projected_cpu_cost_prefers_less_loaded_node():

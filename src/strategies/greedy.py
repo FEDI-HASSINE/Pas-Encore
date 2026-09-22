@@ -194,11 +194,28 @@ class GreedyStrategy(AllocationStrategy):
         ]
 
         if not available_nodes:
+            # No node can immediately accommodate the task. Queue it on
+            # the least-loaded node instead of dropping it, so every
+            # task is executed (the orchestrator waits for capacity).
+            candidates = list(self.nodes.values())
+
+            def _projected_load(node) -> float:
+                if node.cpu_capacity <= 0:
+                    return float("inf")
+                return (node.cpu_utilized + task.cpu_units) / node.cpu_capacity
+
+            fallback_node = min(
+                candidates,
+                key=lambda node: (_projected_load(node), node.id),
+            )
             return AllocationDecision(
                 task_id=task.id,
-                chosen_node_id="",
-                score=None,
-                reason="No node has enough available CPU capacity.",
+                chosen_node_id=fallback_node.id,
+                score=0.0,
+                reason=(
+                    "Greedy S3 fallback: all nodes saturated; "
+                    f"queue on least-loaded node {fallback_node.id}."
+                ),
             )
 
         # -------------------------------------------------------------
