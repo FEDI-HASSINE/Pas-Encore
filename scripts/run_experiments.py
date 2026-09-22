@@ -44,7 +44,7 @@ if str(REPO_ROOT) not in sys.path:
 # Official simulation entry point
 # ---------------------------------------------------------------------------
 
-from run_sim import run_single
+from run_sim import STRATEGY_NAMES, run_single
 
 
 # ---------------------------------------------------------------------------
@@ -65,11 +65,11 @@ STRATEGIES = [
 ]
 
 SEEDS = [
-    1,
-    2,
-    3,
-    4,
-    5,
+    42,
+    43,
+    44,
+    45,
+    46,
 ]
 
 RESULTS_DIR = REPO_ROOT / "results"
@@ -161,6 +161,7 @@ def save_profile_results(
     fieldnames = [
         "Strategy",
         "Seed",
+        "Decisions",
         "M_T",
         "M_L",
     ]
@@ -182,9 +183,11 @@ def save_profile_results(
             writer.writerow(
                 {
                     "Strategy":
-                        f"S{result['Strategy']}",
+                        STRATEGY_NAMES[result["Strategy"]],
                     "Seed":
                         result["Seed"],
+                    "Decisions":
+                        result["decisions"],
                     "M_T":
                         result["M_T"],
                     "M_L":

@@ -95,6 +95,63 @@ def build_strategy(strategy_id: int, topology):
 
 
 # ---------------------------------------------------------------------------
+# Simulation duration helper
+# ---------------------------------------------------------------------------
+
+def _default_duration(raw_tasks: list[dict], nodes: dict) -> float:
+    """Compute a default duration long enough to drain queued work.
+
+    A task holding ``c`` CPU units runs for ``c`` seconds, so draining
+    everything through the weakest node takes roughly
+    ``sum(cpu**2) / min_capacity`` seconds. Uses that bound plus the
+    latest arrival and a buffer, so queued runs finish completely.
+    """
+    max_arrival = (
+        max(task["arrival_time"] for task in raw_tasks) if raw_tasks else 0.0
+    )
+    total_work = sum(
+        task["cpu_units"] ** 2 for task in raw_tasks
+    )
+    capacities = [
+        node.cpu_capacity for node in nodes.values() if node.cpu_capacity > 0
+    ]
+    min_capacity = min(capacities) if capacities else 1.0
+    return float(max_arrival + total_work / min_capacity + 100.0)
+
+
+# ---------------------------------------------------------------------------
+# Drain helper
+# ---------------------------------------------------------------------------
+
+def _run_until_drained(
+    env,
+    orchestrator: Orchestrator,
+    total_tasks: int,
+    sim_duration: float,
+    max_extra_time: float = 100000.0,
+) -> None:
+    """Run the simulation until every task has completed.
+
+    The fixed ``sim_duration`` may end while queued tasks are still
+    executing. Since every allocated task eventually completes (pools
+    always drain and oversized tasks run unconstrained), keep running
+    in chunks until the completed count reaches the total. The hard
+    cap prevents an infinite loop on pathological inputs.
+    """
+    env.run(until=sim_duration)
+    deadline = sim_duration + max_extra_time
+    while len(orchestrator.completed_tasks) < total_tasks and env.now < deadline:
+        env.run(until=min(env.now + 500.0, deadline))
+    if len(orchestrator.completed_tasks) < total_tasks:
+        logger.warning(
+            "Simulation stopped with %d/%d tasks incomplete at t=%.1f",
+            len(orchestrator.completed_tasks),
+            total_tasks,
+            env.now,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Task feeder process
 # ---------------------------------------------------------------------------
 
@@ -239,33 +296,9 @@ def run_single(
     if duration is not None:
         sim_duration = duration
     else:
-        max_arrival = (
-            max(
-                task["arrival_time"]
-                for task in raw_tasks
-            )
-            if raw_tasks
-            else 0.0
-        )
+        sim_duration = _default_duration(raw_tasks, nodes)
 
-        max_cpu = (
-            max(
-                task["cpu_units"]
-                for task in raw_tasks
-            )
-            if raw_tasks
-            else 0.0
-        )
-
-        sim_duration = (
-            max_arrival
-            + max_cpu
-            + 100
-        )
-
-    env.run(
-        until=sim_duration
-    )
+    _run_until_drained(env, orchestrator, len(raw_tasks), sim_duration)
 
     # 6. Compute metrics
     metrics = compute_all(
@@ -299,6 +332,8 @@ def run_single(
             orchestrator.completed_tasks
         ),
         "Simulation_Time": float(env.now),
+        "decisions": orchestrator.decision_count,
+        "duration": float(env.now),
     }
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
@@ -378,12 +413,10 @@ Examples:
     if args.duration is not None:
         sim_duration = args.duration
     else:
-        max_arrival = max(t["arrival_time"] for t in raw_tasks) if raw_tasks else 0
-        max_cpu = max(t["cpu_units"] for t in raw_tasks) if raw_tasks else 0
-        sim_duration = max_arrival + max_cpu + 100  # buffer
+        sim_duration = _default_duration(raw_tasks, nodes)
 
     logger.info("Simulation running for %.1f seconds...", sim_duration)
-    env.run(until=sim_duration)
+    _run_until_drained(env, orchestrator, len(raw_tasks), sim_duration)
 
     # --- 6. Compute metrics ---
     metrics = compute_all(
