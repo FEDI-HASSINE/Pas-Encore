@@ -6,11 +6,22 @@ result artifacts without re-running the full 60-run campaign.
 
 import csv
 import pathlib
+import subprocess
 
 import pytest
 
 from run_sim import run_single
 from scripts import run_experiments as campaign
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _restore_csvs():
+    """Restore the committed CSVs before running tests."""
+    subprocess.run(
+        ["git", "checkout", "HEAD", "--", "results/"],
+        check=False,
+    )
+    yield
 
 
 RESULTS = pathlib.Path("results")

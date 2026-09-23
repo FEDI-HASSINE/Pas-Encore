@@ -125,7 +125,81 @@ We use six metrics. Makespan is $M_T = \max(\mathrm{completion\_time}) - \min(\m
 \section{Experiments and Roadmap}
 \label{sec:experiments}
 
-The synthetic evaluation uses four workload profiles designed to isolate the primary metrics: burst arrivals stress makespan, energy-constrained arrivals stress efficiency, radiation-annotated arrivals stress resilience, and mixed-priority arrivals stress scheduling differentiation. Quantitative results and statistical comparisons will be added after the batch experiments are completed; this section currently documents the experimental design rather than numerical findings.
+The synthetic evaluation uses four workload profiles designed to isolate the primary metrics: burst arrivals stress makespan, energy-constrained arrivals stress efficiency, radiation-annotated arrivals stress resilience, and mixed-priority arrivals stress scheduling differentiation. We report results per workload profile. Because the four profiles stress different dimensions, we report the metric most sensitive to the strategy for each profile.
+
+\subsection{Preliminary Results}
+\label{sec:results}
+
+\paragraph{Burst profile (Makespan).}
+The Burst profile delivers 150 tasks simultaneously at $t=0$. The makespan $M_T$ is directly controlled by the allocation strategy. Over 5 seeds, we obtain:
+
+\begin{table}[h!]
+\centering
+\caption{Burst profile --- Makespan ($M_T$, seconds).}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Strategy} & \textbf{$M_T$ mean $\pm$ std} & \textbf{$p$-value vs S1} \\
+\midrule
+S1 (AlwaysGround)  & $174.85 \pm 5.2$  & --- \\
+S2 (AlwaysOrbital) & $564.41 \pm 2.2$  & $<0.001$ \\
+S3 (Greedy)        & $171.56 \pm 10.5$ & $0.60$ \\
+\bottomrule
+\end{tabular}
+\label{tab:burst}
+\end{table}
+
+S2 (AlwaysOrbital) is 3.2$\times$ slower than S1 (Cloud), confirming the LEO satellite's limited capacity ($\mu=10$ CPU units vs 100 for Cloud-AWS). S3 (Greedy) matches S1 on makespan ($p=0.60$): the Greedy score consistently selects Cloud-AWS, which dominates the topology.
+
+\paragraph{Energy, Mixed, and Radiation profiles (Load Balance).}
+For the remaining three profiles, tasks arrive over a long window (7200~s, 5000~s, and 3600~s respectively). As a consequence, $M_T$ is dominated by the arrival window and does not discriminate between strategies. We therefore report the load-balance metric $M_L$ (standard deviation of per-node CPU utilization):
+
+\begin{table}[h!]
+\centering
+\caption{Energy / Mixed / Radiation --- Load balance ($M_L$, lower is better).}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Profile} & \textbf{S1 (Cloud)} & \textbf{S2 (LEO-1)} & \textbf{S3 (Greedy)} \\
+\midrule
+Energy    & 0.013 & 0.130 & 0.013 \\
+Mixed     & 0.015 & 0.147 & 0.015 \\
+Radiation & 0.012 & 0.119 & 0.012 \\
+\bottomrule
+\end{tabular}
+\label{tab:loadbalance}
+\end{table}
+
+The AlwaysOrbital baseline (S2) overloads the single LEO-1 node, yielding an $M_L$ about $10\times$ higher than S1 and S3. Both Cloud and Greedy maintain a well-balanced utilization across nodes.
+
+\paragraph{Discussion.}
+These results are consistent with the design principle stated in Section~\ref{sec:methodology}: no single strategy dominates on all metrics. Cloud minimizes latency but concentrates all work on a single node; AlwaysOrbital minimizes transmission but saturates the satellite; Greedy provides a balanced trade-off that matches Cloud on makespan while keeping load balanced. This empirical evidence motivates Phase 3, where we plan to (i) rebalance the topology to make orbital parallelism beneficial, and (ii) introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_burst.png}
+    \caption{Burst profile --- Makespan comparison.}
+    \label{fig:graph_burst}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_energy.png}
+    \caption{Energy profile --- Load balance comparison.}
+    \label{fig:graph_energy}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_mixed.png}
+    \caption{Mixed profile --- Load balance comparison.}
+    \label{fig:graph_mixed}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_radiation.png}
+    \caption{Radiation profile --- Load balance comparison.}
+    \label{fig:graph_radiation}
+\end{figure}
 
 \subsection{External Benchmarks (Phase 3 Roadmap)}
 \label{sec:external-benchmarks}
@@ -141,7 +215,16 @@ The PSPLIB parser, the Google trace sampler, and the Skyfield stub are already i
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper has introduced a unified simulation framework for evaluating dynamic workload allocation strategies in orbital edge computing environments. We implemented five strategies---two static baselines, a greedy heuristic, a dynamic resilient scheduler, and a PPO-based RL agent---and evaluated them on four synthetic workload profiles and a merged benchmark scenario incorporating PSPLIB dependencies, Google trace arrivals, and Skyfield orbital mechanics. Our radiation failure model (M2) and benchmark pipeline (M3) provide the stochastic and structural realism necessary for statistically sound comparison. Results demonstrate that dynamic strategies significantly outperform static baselines across all mission metrics, with the RL agent approaching the Pareto frontier between makespan and energy efficiency. Future work includes full RL training on all profiles, extension to multi-satellite constellations, and hardware-in-the-loop validation.
+This paper presented a discrete-event simulation framework for dynamic workload allocation between space and ground, and a systematic comparison of three allocation strategies under four controlled workload profiles.
+
+Our empirical findings are threefold. First, on the Burst profile, the AlwaysOrbital baseline is $3.2\times$ slower than the Cloud baseline, confirming the impact of limited satellite CPU capacity on makespan. Second, on the Energy, Mixed, and Radiation profiles, the AlwaysOrbital strategy produces a load-balance metric $M_L$ about $10\times$ higher than Cloud and Greedy, showing that a single-satellite policy systematically overloads the orbital node. Third, the Greedy heuristic matches the Cloud baseline on makespan ($p=0.60$) while keeping load balanced, because the Cloud node dominates the topology.
+
+These results are intentionally modest: we do not claim a new algorithm, but rather a reproducible methodology and empirical evidence on the trade-offs between allocation strategies in orbital computing. The framework, the four workload profiles, and the statistical protocol are released as open-source code.
+
+The Greedy heuristic (S3) matches the Cloud baseline (S1) on makespan because Cloud-AWS dominates the topology with 10$\times$ the CPU capacity of LEO satellites. This is not a failure of the Greedy strategy --- it is an empirical finding that motivates Phase 3: rebalancing the topology and using Reinforcement Learning to exploit parallelism across multiple orbital nodes.
+
+\paragraph{Future work (Phase 3).}
+Three extensions are planned. First, we will rebalance the topology so that parallelism across multiple orbital nodes becomes beneficial. Second, we will introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages. Third, we will validate the framework on external benchmarks (PSPLIB task graphs, Google cluster traces, and Skyfield orbital visibility windows) to complement the synthetic profiles used here.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
