@@ -118,7 +118,10 @@ The four communication links are LEO-1~$\leftrightarrow$~GS-Tunisia, LEO-2~$\lef
 
 We implement three allocation strategies and describe two planned for Phase 3. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification:
 \begin{equation}
-    \mathrm{Score} = 0.4 \times \mathrm{CPU}_{\mathrm{suitability}} + 0.4 \times \mathrm{Energy}_{\mathrm{suitability}} + 0.2 \times \mathrm{Communication}_{\mathrm{suitability}}.
+  \text{Score} = 0.4 \cdot \text{CPU}_{\text{suit}}
+              + 0.4 \cdot \text{Energy}_{\text{suit}}
+              + 0.2 \cdot \text{Comm}_{\text{suit}}
+  \label{eq:greedy-score}
 \end{equation}
 Each sub-score is min-max normalized to $[0,1]$ across candidate nodes: $\text{CPU}_{\text{suit}} = 1 - (\rho_{\text{proj}} - \rho_{\min}) / (\rho_{\max} - \rho_{\min})$, where $\rho_{\text{proj}}$ is the projected utilization of the node after assigning the incoming task; energy and communication sub-scores are computed analogously from estimated energy cost and transmission time.
 
