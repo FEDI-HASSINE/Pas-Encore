@@ -32,13 +32,9 @@ Université de Sfax, Tunisia\\
 The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a simulation-based evaluation of three workload allocation strategies on a fixed topology modeled after realistic orbital-ground infrastructure: two static baselines (Always Ground, Always Orbital) and a greedy heuristic. We implement a discrete-event simulator using SimPy, incorporating a stochastic radiation-induced failure model, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Results show that on the Burst profile the AlwaysOrbital baseline is 3.2 times slower than the Cloud baseline, while the greedy heuristic matches the Cloud baseline on makespan (p=0.60) and maintains balanced load. These findings motivate Phase 3 extensions: topology rebalancing, a Reinforcement Learning agent (PPO), and merged benchmark validation. We release our simulation framework as open-source code.
 \end{abstract}
 
-\IEEEkeywords{
-  Orbital edge computing,
-  dynamic task allocation,
-  discrete-event simulation,
-  radiation-induced failures,
-  workload scheduling
-}
+\begin{IEEEkeywords}
+Orbital edge computing, dynamic task allocation, discrete-event simulation, radiation-induced failures, workload scheduling.
+\end{IEEEkeywords}
 
 \section{Introduction}
 \label{sec:introduction}
@@ -94,7 +90,7 @@ The fundamental limitation of static allocation strategies (Always Ground, Alway
 
 For Strategy 1 (Always Ground), $f$ is large because every task must transmit input data to the cloud and receive results, constrained by the 10 Mbps LEO-GS link available only 600s/5400s. Even with infinite cloud compute ($N \to \infty$), the makespan cannot drop below $f \times T_{\text{serial}}$, where $T_{\text{serial}}$ includes the cumulative transmission time. For Strategy 2 (Always Orbital), $f$ is dominated by the orbital node's limited CPU/RAM and energy budget; the serial fraction includes the time spent waiting for battery recharge or node recovery after radiation events. Neither strategy can reduce the serial fraction because they lack the dynamic adaptivity to \textit{avoid} the serial bottleneck: Strategy 1 cannot execute locally when the link is down; Strategy 2 cannot offload when the satellite is overloaded or failed.
 
-Dynamic strategies reduce the effective serial fraction by \textit{selectively} offloading only when the link is available and the cloud offers a net benefit, and by executing locally when the link is down or the satellite has spare capacity. The greedy heuristic approximates this via instantaneous scoring; the planned resilient scheduler would add failure recovery; the planned RL agent would learn to anticipate bottlenecks. Our evaluation quantifies this Amdahl-constrained trade-off via the Pareto frontier between makespan (M$_T$) and efficiency (M$_E$).
+Dynamic strategies reduce the effective serial fraction by \textit{selectively} offloading only when the link is available and the cloud offers a net benefit, and by executing locally when the link is down or the satellite has spare capacity. The greedy heuristic approximates this via instantaneous scoring; the planned resilient scheduler would add failure recovery; the planned RL agent would learn to anticipate bottlenecks. Our evaluation makes a first step toward quantifying this Amdahl-constrained trade-off; full Pareto frontier analysis between makespan ($M_T$) and efficiency ($M_E$) is planned for Phase 3.
 
 \subsection{Integration of Internal Work: Radiation Models and External Benchmarks}
 
@@ -124,7 +120,7 @@ We implement three allocation strategies and describe two planned for Phase 3. S
               + 0.2 \cdot \text{Comm}_{\text{suit}}
   \label{eq:greedy-score}
 \end{equation}
-Each sub-score is min-max normalized to $[0,1]$ across candidate nodes: $\text{CPU}_{\text{suit}} = 1 - (\rho_{\text{proj}} - \rho_{\min}) / (\rho_{\max} - \rho_{\min})$, where $\rho_{\text{proj}}$ is the projected utilization of the node after assigning the incoming task; energy and communication sub-scores are computed analogously from estimated energy cost and transmission time.
+Each sub-score is min-max normalized to $[0,1]$ across candidate nodes. For CPU: $\text{CPU}_{\text{suit}} = 1 - (\rho_{\text{proj}} - \rho_{\min}) / (\rho_{\max} - \rho_{\min})$, where $\rho_{\text{proj}}$ is the projected utilization after assigning the incoming task. For energy: $\text{Energy}_{\text{suit}} = 1 - (E_{\text{proj}} - E_{\min}) / (E_{\max} - E_{\min})$, where $E_{\text{proj}}$ is the estimated energy cost ($\text{cpu\_units} \times \text{energy\_cost}$). For communication: $\text{Comm}_{\text{suit}} = 1 - (T_{\text{proj}} - T_{\min}) / (T_{\max} - T_{\min})$, where $T_{\text{proj}}$ is the estimated transmission time ($\text{data\_size\_mb} \times 8 / \text{bandwidth\_mbps}$).
 
 S4 is the planned Dynamic Resilient Scheduler for Phase 3, adding failure detection and re-scheduling of orphaned tasks. S5 is the planned Reinforcement Learning Agent for Phase 3, using PPO/DQN through Stable-Baselines3 \cite{stable-baselines3}.
 
