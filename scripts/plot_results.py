@@ -1,8 +1,4 @@
-"""Generate M_T barplot comparing S1, S2, S3 for the paper.
-
-Reads results/summary_{profile}.csv (produced by M4's
-run_experiments.py) and outputs results/graph_{profile}.png.
-"""
+"""Generate metric barplot per profile."""
 
 from __future__ import annotations
 
@@ -14,34 +10,55 @@ import pandas as pd
 
 
 STRATEGY_COLORS = {
-    "S1_AlwaysGround": "#e74c3c",
-    "S2_AlwaysOrbital": "#f39c12",
-    "S3_Greedy": "#27ae60",
+    "S1": "#e74c3c",
+    "S2": "#f39c12",
+    "S3": "#27ae60",
+}
+
+# Choix de la métrique principale par profil (alignée sur docs/02)
+PROFILE_METRIC = {
+    "burst":     "M_T",  # makespan
+    "energy":    "M_L",  # load balance
+    "mixed":     "M_L",  # load balance
+    "radiation": "M_L",  # load balance
+}
+
+PROFILE_LABEL = {
+    "burst":     "Makespan M_T (seconds)",
+    "energy":    "Load balance M_L (std-dev)",
+    "mixed":     "Load balance M_L (std-dev)",
+    "radiation": "Load balance M_L (std-dev)",
 }
 
 
-def plot_profile(profile: str) -> Path:
-    """Generate the M_T barplot for one profile."""
-    summary_path = Path("results") / f"summary_{profile}.csv"
-    if not summary_path.exists():
-        raise FileNotFoundError(
-            f"Missing {summary_path}. Run run_experiments.py first."
-        )
+def _pick_column(df: pd.DataFrame, *candidates: str) -> str:
+    for name in candidates:
+        if name in df.columns:
+            return name
+    raise KeyError(f"None of {candidates} in {list(df.columns)}")
 
+
+def plot_profile(profile: str) -> Path:
+    summary_path = Path("results") / f"summary_{profile}.csv"
     df = pd.read_csv(summary_path)
 
+    metric = PROFILE_METRIC.get(profile, "M_T")
+    mean_col = _pick_column(df, f"{metric}_Mean", f"{metric}_mean")
+    std_col = _pick_column(df, f"{metric}_Std", f"{metric}_std")
+
     fig, ax = plt.subplots(figsize=(8, 5))
-    colors = [STRATEGY_COLORS.get(s, "#888888") for s in df["Strategy"]]
+    colors = [STRATEGY_COLORS.get(s, "#888") for s in df["Strategy"]]
     ax.bar(
         df["Strategy"],
-        df["M_T_mean"],
-        yerr=df["M_T_std"],
+        df[mean_col],
+        yerr=df[std_col],
         capsize=5,
         color=colors,
         edgecolor="black",
     )
-    ax.set_ylabel("Makespan M_T (seconds)")
-    ax.set_title(f"Makespan comparison — profile: {profile}")
+    ax.set_ylabel(PROFILE_LABEL.get(profile, metric))
+    ax.set_xlabel("Strategy")
+    ax.set_title(f"{metric} comparison — profile: {profile}")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     plt.tight_layout()
 
@@ -53,9 +70,7 @@ def plot_profile(profile: str) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate M_T barplot for a workload profile."
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--profile",
         choices=["burst", "energy", "radiation", "mixed"],

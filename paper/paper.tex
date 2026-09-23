@@ -12,22 +12,22 @@
 
 \begin{document}
 
-\title{Dynamic Workload Allocation Between Space and Ground:\\ A Simulation-Based Comparative Study of Five Orchestration Strategies}
+\title{Dynamic Workload Allocation Between Space and Ground:\\ A Simulation-Based Comparative Study of Three Orchestration Strategies}
 
 \author{
-\IEEEauthorblockN{Anonymous Authors}
+\IEEEauthorblockN{OrbitSchedulers Team: F. Hassine, Y. Ben Ayed, M. Bellaaj, A. Yassin}
 \IEEEauthorblockA{
-\textit{OrbitSchedulers Team --- IASTAM 6.0 Project 6}\\
 \textit{Institut Supérieur d'Informatique et de Multimédia de Sfax (ISIMS)}\\
 Université de Sfax, Tunisia\\
-anonymous@isimsf.u-sfax.tn
+\textit{IASTAM 6.0 Project 6}\\
+\{fedi.hassine, yassine.benayed, mohsen.bellaaj, achour.yassin\}@isimsf.u-sfax.tn
 }
 }
 
 \maketitle
 
 \begin{abstract}
-The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a comprehensive simulation-based evaluation of five workload allocation strategies, ranging from deterministic baselines to a reinforcement learning agent, on a fixed topology modeled after realistic orbital-ground infrastructure. We implement a discrete-event simulator using SimPy, incorporating stochastic radiation-induced failure models, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Results demonstrate that the greedy heuristic achieves 23\% lower makespan than static baselines on burst profiles, while the dynamic resilient scheduler recovers 87\% of orphaned tasks under radiation-induced failures. The reinforcement learning agent, trained via PPO, approaches the Pareto frontier between makespan and energy efficiency, outperforming all baselines on the composite mission score. We release our simulation framework and datasets to enable reproducible benchmarking of orbital scheduling policies.
+The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a simulation-based evaluation of three workload allocation strategies on a fixed topology modeled after realistic orbital-ground infrastructure: two static baselines (Always Ground, Always Orbital) and a greedy heuristic. We implement a discrete-event simulator using SimPy, incorporating a stochastic radiation-induced failure model, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Results show that on the Burst profile the AlwaysOrbital baseline is 3.2 times slower than the Cloud baseline, while the greedy heuristic matches the Cloud baseline on makespan (p=0.60) and maintains balanced load. These findings motivate Phase 3 extensions: topology rebalancing, a Reinforcement Learning agent (PPO), and merged benchmark validation. We release our simulation framework as open-source code.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -37,7 +37,7 @@ Orbital edge computing, dynamic task allocation, reinforcement learning, discret
 \section{Introduction}
 \label{sec:introduction}
 
-The proliferation of low Earth orbit (LEO) satellite constellations has catalyzed a shift from purely ground-based data processing to \textit{orbital edge computing}, where computational tasks are executed in situ on satellites to reduce latency, bandwidth consumption, and dependence on intermittent ground links. Pioneering systems such as \textit{Starcloud} \cite{starcloud} and \textit{Suncatcher} \cite{suncatcher} have demonstrated the feasibility of deploying containerized workloads on radiation-hardened processors aboard LEO satellites, enabling real-time analytics for Earth observation, maritime surveillance, and autonomous navigation. These platforms expose a heterogeneous compute fabric: orbital nodes (LEO-1, LEO-2) with limited CPU/RAM and high energy cost per operation; ground stations (GS-Tunisia) with moderate resources and periodic visibility windows; and terrestrial clouds (Cloud-AWS) with abundant resources but significant propagation latency and uplink bandwidth constraints.
+The proliferation of low Earth orbit (LEO) satellite constellations has catalyzed a shift from purely ground-based data processing to \textit{orbital edge computing}, where computational tasks are executed in situ on satellites to reduce latency, bandwidth consumption, and dependence on intermittent ground links. Pioneering systems such as Starcloud and Suncatcher have demonstrated the feasibility of deploying containerized workloads on radiation-hardened processors aboard LEO satellites, enabling real-time analytics for Earth observation, maritime surveillance, and autonomous navigation. These platforms expose a heterogeneous compute fabric: orbital nodes (LEO-1, LEO-2) with limited CPU/RAM and high energy cost per operation; ground stations (GS-Tunisia) with moderate resources and periodic visibility windows; and terrestrial clouds (Cloud-AWS) with abundant resources but significant propagation latency and uplink bandwidth constraints.
 
 Despite these advances, the dominant operational model remains \textit{static allocation}: tasks are either always offloaded to the cloud (Strategy 1: Always Ground) or always executed locally on the satellite (Strategy 2: Always Orbital). Both approaches suffer from fundamental limitations when faced with the stochastic dynamics of the orbital environment. The communication link between a LEO satellite and its ground station is available only during brief visibility windows---approximately 600 seconds every 5400 seconds (orbital period $\approx$ 90 minutes), with a 2700-second offset between adjacent satellites. Energy availability fluctuates with orbital eclipse cycles and battery state-of-charge. Most critically, the space radiation environment induces stochastic hardware failures---single-event upsets (SEUs) causing silent data corruption (SDC), single-event functional interrupts (SEFIs) requiring node reboot, and single-event latch-ups (SELs) causing permanent node destruction. These phenomena are neither periodic nor predictable; they follow stochastic processes governed by radiation dose accumulation.
 
@@ -49,13 +49,13 @@ To answer this question, we make the following contributions:
 
 \begin{enumerate}
     \item \textbf{Unified simulation framework:} We implement a discrete-event simulator in SimPy \cite{simpy} that faithfully models a fixed heterogeneous topology (2 LEO satellites, 1 ground station, 1 terrestrial cloud) with realistic link dynamics (periodic visibility, inter-satellite links), energy costs, startup penalties, and sensor noise. The framework enforces identical conditions across all strategies, ensuring that performance differences are attributable solely to the orchestration logic.
-    \item \textbf{Five orchestration strategies:} We implement and evaluate five distinct allocation strategies: (1) Always Ground, (2) Always Orbital, (3) Greedy Heuristic (score-based instantaneous assignment), (4) Dynamic Resilient Scheduler (greedy + failure detection and re-scheduling), and (5) Reinforcement Learning Agent (PPO via Stable-Baselines3 \cite{stable-baselines3}). All strategies share a common abstract interface, enabling fair comparison.
-    \item \textbf{Stochastic radiation failure model:} We integrate a physics-inspired radiation model \cite{m2-radiation} where cumulative dose accumulates at 0.01 rad/s, and time-to-failure for three failure modes (SDC: 17 rad, HBM: 44 rad, SEFI: 5000 rad) is sampled from exponential distributions. This model replaces arbitrary failure injection with a reproducible stochastic process parameterized by characteristic dose.
+    \item \textbf{Three orchestration strategies:} We implement and evaluate three allocation strategies: (1) Always Ground, (2) Always Orbital, and (3) Greedy Heuristic (score-based instantaneous assignment). All strategies share a common abstract interface, enabling fair comparison. Dynamic resilient scheduling and Reinforcement Learning (PPO via Stable-Baselines3 \cite{stable-baselines3}) are planned for Phase 3.
+    \item \textbf{Stochastic radiation failure model:} We integrate a physics-inspired radiation model where cumulative dose accumulates at 0.01 rad/s, and time-to-failure for three failure modes (SDC: 17 rad, HBM: 44 rad, SEFI: 5000 rad) is sampled from exponential distributions. This model replaces arbitrary failure injection with a reproducible stochastic process parameterized by characteristic dose.
     \item \textbf{External benchmark integration:} We incorporate three real-world benchmarks: PSPLIB \cite{psplib} for task dependency graphs (precedence constraints), Google cluster traces \cite{google-traces} for autocorrelated arrival patterns, and Skyfield \cite{skyfield} for orbital-mechanics-based link visibility computed from TLE data.
-    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority) each stressing one primary metric. We execute all five strategies across all four profiles with 10 random seeds per cell, compute six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$), and compare strategies via min-max normalization against static baselines, composite mission score, and Pareto frontier analysis (M$_T$ vs M$_E$).
+    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority) each stressing one primary metric. We execute all three strategies across all four profiles with 5 random seeds per cell, compute six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$), and compare strategies via min-max normalization against static baselines, composite mission score, and Pareto frontier analysis (M$_T$ vs M$_E$).
 \end{enumerate}
 
-The remainder of this paper is organized as follows. Section \ref{sec:related-work} reviews related work on orbital edge computing and dynamic scheduling, identifying the gaps addressed by our framework. Section \ref{sec:methodology} details the simulation environment, topology, workload profiles, and the five strategies. Section \ref{sec:metrics} specifies the evaluation metrics and comparison protocol. Section \ref{sec:experiments} presents experimental results, including statistical analysis and Pareto visualization. Section \ref{sec:conclusion} concludes with limitations and future work directions, including the planned integration of the RL agent (Strategy 5) in Phase 3.
+The remainder of this paper is organized as follows. Section \ref{sec:related-work} reviews related work on orbital edge computing and dynamic scheduling, identifying the gaps addressed by our framework. Section \ref{sec:methodology} details the simulation environment, topology, workload profiles, and the three strategies. Section \ref{sec:metrics} specifies the evaluation metrics and comparison protocol. Section \ref{sec:experiments} presents experimental results and statistical analysis. Section \ref{sec:conclusion} concludes with limitations and future work directions, including the planned integration of the RL agent (Strategy 5) in Phase 3.
 
 \section{Related Work}
 \label{sec:related-work}
@@ -66,17 +66,17 @@ Orbital edge computing sits at the intersection of satellite systems, distribute
 
 The vision of computing in orbit has been articulated in several foundational works. \textit{When to Compute in Space} \cite{when-to-compute} establishes a decision framework for determining which workloads benefit from in-orbit processing versus ground offloading. The authors develop an analytical model incorporating communication latency, bandwidth constraints, compute capacity, and data reduction ratios, showing that workloads with high data reduction (e.g., feature extraction from raw sensor streams) favor orbital execution, while bandwidth-intensive workloads favor ground offloading. Their model, however, assumes static link availability and does not account for stochastic radiation failures or dynamic energy constraints. Our work extends this framework by embedding the decision process in a discrete-event simulator where link availability, node health, and radiation exposure evolve dynamically, and by evaluating learned policies against this richer model.
 
-\textit{Which Workloads Belong in Orbit?} \cite{which-workloads} complements the above by characterizing workload classes---Earth observation, signal processing, machine learning inference---and mapping them to orbital vs. ground execution based on latency sensitivity, data volume, and compute intensity. They identify a ``sweet spot'' for orbital execution: latency-critical, compute-moderate, data-reduction-heavy workloads. Their analysis is based on static profiling and does not consider runtime adaptation to link outages or node failures. Our greedy and resilient strategies explicitly address this gap by re-evaluating allocation decisions at each task arrival and upon failure detection.
+\textit{Which Workloads Belong in Orbit?} \cite{which-workloads} complements the above by characterizing workload classes---Earth observation, signal processing, machine learning inference---and mapping them to orbital vs. ground execution based on latency sensitivity, data volume, and compute intensity. They identify a ``sweet spot'' for orbital execution: latency-critical, compute-moderate, data-reduction-heavy workloads. Their analysis is based on static profiling and does not consider runtime adaptation to link outages or node failures. Our greedy strategy explicitly addresses this gap by re-evaluating allocation decisions at each task arrival; failure-triggered re-scheduling is planned for the resilient scheduler in Phase 3.
 
-\textit{Survey on Orbital Edge Computing} \cite{orbital-edge-survey} provides a comprehensive taxonomy of orbital edge architectures, including satellite-only, satellite-ground, and satellite-ground-cloud hierarchies. They categorize existing systems by orbit (LEO, MEO, GEO), compute model (bare metal, container, serverless), and communication pattern (store-and-forward, real-time). The survey highlights key open challenges: intermittent connectivity, thermal and power constraints, radiation hardness, and the lack of standardized orchestration APIs. Our work directly addresses the orchestration challenge by implementing and comparing five strategies on a unified platform, and the radiation challenge by integrating a dose-accumulation failure model. The survey also notes the scarcity of reproducible benchmarks; our integration of PSPLIB, Google traces, and Skyfield constitutes a step toward filling this gap.
+\textit{Survey on Orbital Edge Computing} \cite{orbital-edge-survey} provides a comprehensive taxonomy of orbital edge architectures, including satellite-only, satellite-ground, and satellite-ground-cloud hierarchies. They categorize existing systems by orbit (LEO, MEO, GEO), compute model (bare metal, container, serverless), and communication pattern (store-and-forward, real-time). The survey highlights key open challenges: intermittent connectivity, thermal and power constraints, radiation hardness, and the lack of standardized orchestration APIs. Our work directly addresses the orchestration challenge by implementing and comparing three strategies on a unified platform, and the radiation challenge by integrating a dose-accumulation failure model. The survey also notes the scarcity of reproducible benchmarks; our integration of PSPLIB, Google traces, and Skyfield constitutes a step toward filling this gap.
 
 \subsection{Dynamic Scheduling for Heterogeneous Environments}
 
-Dynamic workload allocation in heterogeneous environments has been extensively studied in terrestrial cloud and edge contexts. Heuristic approaches such as Min-Min, Max-Min, and HEFT \cite{heft} assign tasks based on estimated completion times, but assume static resource availability and full observability. Metaheuristics (genetic algorithms, ant colony optimization) \cite{metaheuristics} explore larger solution spaces but are computationally prohibitive for real-time scheduling. Reinforcement learning has emerged as a promising paradigm: DeepRM \cite{deeprm} uses DQN for resource allocation in cluster schedulers; Decima \cite{decima} applies policy gradients to Spark job scheduling. These works assume persistent connectivity and homogeneous failure models, which do not hold in orbital settings. Our RL agent (Strategy 5) adapts the PPO algorithm to a state space that includes link status, radiation dose, and battery level---features absent in terrestrial schedulers.
+Dynamic workload allocation in heterogeneous environments has been extensively studied in terrestrial cloud and edge contexts. Heuristic approaches such as Min-Min, Max-Min, and HEFT \cite{heft} assign tasks based on estimated completion times, but assume static resource availability and full observability. Metaheuristics (genetic algorithms, ant colony optimization) \cite{metaheuristics} explore larger solution spaces but are computationally prohibitive for real-time scheduling. Reinforcement learning has emerged as a promising paradigm: DeepRM \cite{deeprm} uses DQN for resource allocation in cluster schedulers; Decima \cite{decima} applies policy gradients to Spark job scheduling. These works assume persistent connectivity and homogeneous failure models, which do not hold in orbital settings. The planned RL agent (Strategy 5) would adapt the PPO algorithm to a state space that includes link status, radiation dose, and battery level---features absent in terrestrial schedulers.
 
 \subsection{Failure-Aware Workload Management}
 
-Resilience to failures in distributed systems is traditionally addressed through checkpoint-restart \cite{checkpoint}, task replication \cite{replication}, and proactive migration \cite{proactive-migration}. In orbital contexts, the failure modes are distinct: radiation-induced errors are stochastic, correlated with orbital position (South Atlantic Anomaly), and vary in severity from bit flips (SDC) to permanent destruction (SEFI). Prior work on space computing resilience \cite{space-resilience1, space-resilience2} focuses on hardware-level mitigation (EDAC, TMR) rather than scheduler-level adaptation. Our Dynamic Resilient Scheduler (Strategy 4) introduces a monitoring daemon that detects node/link failures and triggers immediate re-scheduling of orphaned tasks, a capability absent from static and greedy strategies. The radiation model (M2) provides the stochastic failure generator that makes this resilience evaluation meaningful: failures are not injected at fixed timestamps but emerge from the physics of dose accumulation, enabling statistically sound resilience metrics (M$_R$).
+Resilience to failures in distributed systems is traditionally addressed through checkpoint-restart \cite{checkpoint}, task replication \cite{replication}, and proactive migration \cite{proactive-migration}. In orbital contexts, the failure modes are distinct: radiation-induced errors are stochastic, correlated with orbital position (South Atlantic Anomaly), and vary in severity from bit flips (SDC) to permanent destruction (SEFI). Prior work on space computing resilience focuses on hardware-level mitigation (EDAC, TMR) rather than scheduler-level adaptation. The planned Dynamic Resilient Scheduler (Strategy 4) would introduce a monitoring daemon that detects node/link failures and triggers immediate re-scheduling of orphaned tasks, a capability absent from the implemented static and greedy strategies. The radiation model (M2) provides the stochastic failure generator that makes this resilience evaluation meaningful: failures are not injected at fixed timestamps but emerge from the physics of dose accumulation, enabling statistically sound resilience metrics (M$_R$).
 
 \subsection{Limitations of Static Approaches and Amdahl's Law}
 
@@ -88,11 +88,11 @@ The fundamental limitation of static allocation strategies (Always Ground, Alway
 
 For Strategy 1 (Always Ground), $f$ is large because every task must transmit input data to the cloud and receive results, constrained by the 10 Mbps LEO-GS link available only 600s/5400s. Even with infinite cloud compute ($N \to \infty$), the makespan cannot drop below $f \times T_{\text{serial}}$, where $T_{\text{serial}}$ includes the cumulative transmission time. For Strategy 2 (Always Orbital), $f$ is dominated by the orbital node's limited CPU/RAM and energy budget; the serial fraction includes the time spent waiting for battery recharge or node recovery after radiation events. Neither strategy can reduce the serial fraction because they lack the dynamic adaptivity to \textit{avoid} the serial bottleneck: Strategy 1 cannot execute locally when the link is down; Strategy 2 cannot offload when the satellite is overloaded or failed.
 
-Dynamic strategies (3--5) reduce the effective serial fraction by \textit{selectively} offloading only when the link is available and the cloud offers a net benefit, and by executing locally when the link is down or the satellite has spare capacity. The greedy heuristic approximates this via instantaneous scoring; the resilient scheduler adds failure recovery; the RL agent learns to anticipate bottlenecks. Our evaluation quantifies this Amdahl-constrained trade-off via the Pareto frontier between makespan (M$_T$) and efficiency (M$_E$).
+Dynamic strategies reduce the effective serial fraction by \textit{selectively} offloading only when the link is available and the cloud offers a net benefit, and by executing locally when the link is down or the satellite has spare capacity. The greedy heuristic approximates this via instantaneous scoring; the planned resilient scheduler would add failure recovery; the planned RL agent would learn to anticipate bottlenecks. Our evaluation quantifies this Amdahl-constrained trade-off via the Pareto frontier between makespan (M$_T$) and efficiency (M$_E$).
 
 \subsection{Integration of Internal Work: Radiation Models and External Benchmarks}
 
-Our framework operationalizes two critical internal components developed in parallel. The \textbf{radiation failure model} (M2) \cite{m2-radiation} implements a dose-accumulation process where cumulative dose $D(t)$ increases linearly with exposure time at 0.01 rad/s. Time-to-failure for each mode is sampled from an exponential distribution with scale $\beta = D_c / 0.01$, where $D_c$ is the characteristic dose (17, 44, 5000 rad for SDC, HBM, SEFI). This model replaces arbitrary failure injection with a reproducible stochastic process, enabling statistically rigorous resilience evaluation (M$_R$). The model is integrated into the simulator's node health monitoring: when a failure event occurs, the affected node transitions to a degraded or unavailable state, triggering the re-scheduling logic of Strategies 4 and 5.
+Our framework operationalizes two critical internal components developed in parallel. The \textbf{radiation failure model} (M2) implements a dose-accumulation process where cumulative dose $D(t)$ increases linearly with exposure time at 0.01 rad/s. Time-to-failure for each mode is sampled from an exponential distribution with scale $\beta = D_c / 0.01$, where $D_c$ is the characteristic dose (17, 44, 5000 rad for SDC, HBM, SEFI). This model replaces arbitrary failure injection with a reproducible stochastic process, enabling statistically rigorous resilience evaluation (M$_R$). The model is integrated into the simulator's node health monitoring: when a failure event occurs, the affected node transitions to a degraded or unavailable state, triggering the re-scheduling logic of Strategies 4 and 5.
 
 The \textbf{external benchmark pipeline} (M3) integrates three real-world data sources: (i) PSPLIB \cite{psplib} J30 instances (480 task graphs with precedence constraints, durations, and resource demands), parsed into a standardized task dictionary format (id, duration, predecessors, resources); (ii) Google Borg cluster traces \cite{google-traces}, providing autocorrelated arrival timestamps that capture real-world burstiness; (iii) Skyfield \cite{skyfield} orbital mechanics, computing LEO-ground visibility windows from TLE data rather than using synthetic periodic windows. These benchmarks are combined into a \textit{merged scenario} for Phase 3 validation, while the four synthetic profiles remain the primary evaluation basis for statistical interpretability. The PSPLIB parser (M3) converts successor lists to predecessor lists, ensuring compatibility with the scheduler's dependency-checking logic.
 
@@ -111,7 +111,7 @@ The four communication links are LEO-1~$\leftrightarrow$~GS-Tunisia, LEO-2~$\lef
 \subsection{Allocation Strategies}
 \label{sec:strategies}
 
-We compare five allocation strategies through a common abstract interface. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification:
+We implement three allocation strategies and describe two planned for Phase 3. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification:
 \begin{equation}
     \mathrm{Score} = 0.4 \times \mathrm{CPU}_{\mathrm{suitability}} + 0.4 \times \mathrm{Energy}_{\mathrm{suitability}} + 0.2 \times \mathrm{Communication}_{\mathrm{suitability}}.
 \end{equation}
@@ -120,12 +120,86 @@ S4 is the planned Dynamic Resilient Scheduler for Phase 3, adding failure detect
 \subsection{Evaluation Metrics}
 \label{sec:metrics}
 
-We use six metrics. Makespan is $M_T = \max(\mathrm{completion\_time}) - \min(\mathrm{arrival\_time})$. Load balance is $M_L$, the standard deviation of per-node CPU utilization. Resilience is $M_R = \mathrm{completed\_after\_failure} / \mathrm{orphaned}$. Efficiency is $M_E = (\mathrm{energy} + \mathrm{transmission}) / \mathrm{completed}$. Queue instability is $M_Q$, the time-averaged saturation above 0.85. Decision stability is $M_S = \mathrm{migrations} / \mathrm{completed}$. The radiation model \cite{m2-radiation} and PSPLIB integration \cite{m3-psplib} provide stochastic failure realism and dependency-structure realism, respectively.
+We use six metrics. Makespan is $M_T = \max(\mathrm{completion\_time}) - \min(\mathrm{arrival\_time})$. Load balance is $M_L$, the standard deviation of per-node CPU utilization. Resilience is $M_R = \mathrm{completed\_after\_failure} / \mathrm{orphaned}$. Efficiency is $M_E = (\mathrm{energy} + \mathrm{transmission}) / \mathrm{completed}$. Queue instability is $M_Q$, the time-averaged saturation above 0.85. Decision stability is $M_S = \mathrm{migrations} / \mathrm{completed}$. The radiation model and PSPLIB integration provide stochastic failure realism and dependency-structure realism, respectively.
 
 \section{Experiments and Roadmap}
 \label{sec:experiments}
 
-The synthetic evaluation uses four workload profiles designed to isolate the primary metrics: burst arrivals stress makespan, energy-constrained arrivals stress efficiency, radiation-annotated arrivals stress resilience, and mixed-priority arrivals stress scheduling differentiation. Quantitative results and statistical comparisons will be added after the batch experiments are completed; this section currently documents the experimental design rather than numerical findings.
+The synthetic evaluation uses four workload profiles designed to isolate the primary metrics: burst arrivals stress makespan, energy-constrained arrivals stress efficiency, radiation-annotated arrivals stress resilience, and mixed-priority arrivals stress scheduling differentiation. We report results per workload profile. Because the four profiles stress different dimensions, we report the metric most sensitive to the strategy for each profile.
+
+\subsection{Preliminary Results}
+\label{sec:results}
+
+\paragraph{Burst profile (Makespan).}
+The Burst profile delivers 150 tasks simultaneously at $t=0$. The makespan $M_T$ is directly controlled by the allocation strategy. Over 5 seeds, we obtain:
+
+\begin{table}[h!]
+\centering
+\caption{Burst profile --- Makespan ($M_T$, seconds).}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Strategy} & \textbf{$M_T$ mean $\pm$ std} & \textbf{$p$-value vs S1} \\
+\midrule
+S1 (AlwaysGround)  & $174.85 \pm 5.2$  & --- \\
+S2 (AlwaysOrbital) & $564.41 \pm 2.2$  & $<0.001$ \\
+S3 (Greedy)        & $171.56 \pm 10.5$ & $0.60$ \\
+\bottomrule
+\end{tabular}
+\label{tab:burst}
+\end{table}
+
+S2 (AlwaysOrbital) is 3.2$\times$ slower than S1 (Cloud), confirming the LEO satellite's limited capacity ($\mu=10$ CPU units vs 100 for Cloud-AWS). S3 (Greedy) matches S1 on makespan ($p=0.60$): the Greedy score consistently selects Cloud-AWS, which dominates the topology.
+
+\paragraph{Energy, Mixed, and Radiation profiles (Load Balance).}
+For the remaining three profiles, tasks arrive over a long window (7200~s, 5000~s, and 3600~s respectively). As a consequence, $M_T$ is dominated by the arrival window and does not discriminate between strategies. We therefore report the load-balance metric $M_L$ (standard deviation of per-node CPU utilization):
+
+\begin{table}[h!]
+\centering
+\caption{Energy / Mixed / Radiation --- Load balance ($M_L$, lower is better).}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Profile} & \textbf{S1 (Cloud)} & \textbf{S2 (LEO-1)} & \textbf{S3 (Greedy)} \\
+\midrule
+Energy    & 0.013 & 0.130 & 0.013 \\
+Mixed     & 0.015 & 0.147 & 0.015 \\
+Radiation & 0.012 & 0.119 & 0.012 \\
+\bottomrule
+\end{tabular}
+\label{tab:loadbalance}
+\end{table}
+
+The AlwaysOrbital baseline (S2) overloads the single LEO-1 node, yielding an $M_L$ about $10\times$ higher than S1 and S3. Both Cloud and Greedy maintain a well-balanced utilization across nodes.
+
+\paragraph{Discussion.}
+These results are consistent with the design principle stated in Section~\ref{sec:methodology}: no single strategy dominates on all metrics. Cloud minimizes latency but concentrates all work on a single node; AlwaysOrbital minimizes transmission but saturates the satellite; Greedy provides a balanced trade-off that matches Cloud on makespan while keeping load balanced. This empirical evidence motivates Phase 3, where we plan to (i) rebalance the topology to make orbital parallelism beneficial, and (ii) introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_burst.png}
+    \caption{Burst profile --- Makespan comparison.}
+    \label{fig:graph_burst}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_energy.png}
+    \caption{Energy profile --- Load balance comparison.}
+    \label{fig:graph_energy}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_mixed.png}
+    \caption{Mixed profile --- Load balance comparison.}
+    \label{fig:graph_mixed}
+\end{figure}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/graph_radiation.png}
+    \caption{Radiation profile --- Load balance comparison.}
+    \label{fig:graph_radiation}
+\end{figure}
 
 \subsection{External Benchmarks (Phase 3 Roadmap)}
 \label{sec:external-benchmarks}
@@ -141,7 +215,16 @@ The PSPLIB parser, the Google trace sampler, and the Skyfield stub are already i
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper has introduced a unified simulation framework for evaluating dynamic workload allocation strategies in orbital edge computing environments. We implemented five strategies---two static baselines, a greedy heuristic, a dynamic resilient scheduler, and a PPO-based RL agent---and evaluated them on four synthetic workload profiles and a merged benchmark scenario incorporating PSPLIB dependencies, Google trace arrivals, and Skyfield orbital mechanics. Our radiation failure model (M2) and benchmark pipeline (M3) provide the stochastic and structural realism necessary for statistically sound comparison. Results demonstrate that dynamic strategies significantly outperform static baselines across all mission metrics, with the RL agent approaching the Pareto frontier between makespan and energy efficiency. Future work includes full RL training on all profiles, extension to multi-satellite constellations, and hardware-in-the-loop validation.
+This paper presented a discrete-event simulation framework for dynamic workload allocation between space and ground, and a systematic comparison of three allocation strategies under four controlled workload profiles.
+
+Our empirical findings are threefold. First, on the Burst profile, the AlwaysOrbital baseline is $3.2\times$ slower than the Cloud baseline, confirming the impact of limited satellite CPU capacity on makespan. Second, on the Energy, Mixed, and Radiation profiles, the AlwaysOrbital strategy produces a load-balance metric $M_L$ about $10\times$ higher than Cloud and Greedy, showing that a single-satellite policy systematically overloads the orbital node. Third, the Greedy heuristic matches the Cloud baseline on makespan ($p=0.60$) while keeping load balanced, because the Cloud node dominates the topology.
+
+These results are intentionally modest: we do not claim a new algorithm, but rather a reproducible methodology and empirical evidence on the trade-offs between allocation strategies in orbital computing. The framework, the four workload profiles, and the statistical protocol are released as open-source code.
+
+The Greedy heuristic (S3) matches the Cloud baseline (S1) on makespan because Cloud-AWS dominates the topology with 10$\times$ the CPU capacity of LEO satellites. This is not a failure of the Greedy strategy --- it is an empirical finding that motivates Phase 3: rebalancing the topology and using Reinforcement Learning to exploit parallelism across multiple orbital nodes.
+
+\paragraph{Future work (Phase 3).}
+Three extensions are planned. First, we will rebalance the topology so that parallelism across multiple orbital nodes becomes beneficial. Second, we will introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages. Third, we will validate the framework on external benchmarks (PSPLIB task graphs, Google cluster traces, and Skyfield orbital visibility windows) to complement the synthetic profiles used here.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
