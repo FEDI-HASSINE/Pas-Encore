@@ -31,9 +31,13 @@ Université de Sfax, Tunisia\\
 The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a simulation-based evaluation of three workload allocation strategies on a fixed topology modeled after realistic orbital-ground infrastructure: two static baselines (Always Ground, Always Orbital) and a greedy heuristic. We implement a discrete-event simulator using SimPy, incorporating a stochastic radiation-induced failure model, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Results show that on the Burst profile the AlwaysOrbital baseline is 3.2 times slower than the Cloud baseline, while the greedy heuristic matches the Cloud baseline on makespan (p=0.60) and maintains balanced load. These findings motivate Phase 3 extensions: topology rebalancing, a Reinforcement Learning agent (PPO), and merged benchmark validation. We release our simulation framework as open-source code.
 \end{abstract}
 
-\begin{IEEEkeywords}
-Orbital edge computing, dynamic task allocation, reinforcement learning, discrete-event simulation, radiation-induced failures, PSPLIB, Skyfield.
-\end{IEEEkeywords}
+\IEEEkeywords{
+  Orbital edge computing,
+  dynamic task allocation,
+  discrete-event simulation,
+  radiation-induced failures,
+  workload scheduling
+}
 
 \section{Introduction}
 \label{sec:introduction}
@@ -53,7 +57,7 @@ To answer this question, we make the following contributions:
     \item \textbf{Three orchestration strategies:} We implement and evaluate three allocation strategies: (1) Always Ground, (2) Always Orbital, and (3) Greedy Heuristic (score-based instantaneous assignment). All strategies share a common abstract interface, enabling fair comparison. Dynamic resilient scheduling and Reinforcement Learning (PPO via Stable-Baselines3 \cite{stable-baselines3}) are planned for Phase 3.
     \item \textbf{Stochastic radiation failure model:} We integrate a physics-inspired radiation model where cumulative dose accumulates at 0.01 rad/s, and time-to-failure for three failure modes (SDC: 17 rad, HBM: 44 rad, SEFI: 5000 rad) is sampled from exponential distributions. This model replaces arbitrary failure injection with a reproducible stochastic process parameterized by characteristic dose.
     \item \textbf{External benchmark integration:} We incorporate three real-world benchmarks: PSPLIB \cite{psplib} for task dependency graphs (precedence constraints), Google cluster traces \cite{google-traces} for autocorrelated arrival patterns, and Skyfield \cite{skyfield} for orbital-mechanics-based link visibility computed from TLE data.
-    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority) each stressing one primary metric. We execute all three strategies across all four profiles with 5 random seeds per cell, compute six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$), and compare strategies via min-max normalization against static baselines, composite mission score, and Pareto frontier analysis (M$_T$ vs M$_E$).
+    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority), each stressing one primary metric. We execute all three strategies across all four profiles with 5 random seeds per cell, compute six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$), and report preliminary comparisons of M$_T$ and M$_L$. Min-max normalization, composite mission score, and Pareto frontier analysis are planned for the full Phase 3 evaluation.
 \end{enumerate}
 
 The remainder of this paper is organized as follows. Section \ref{sec:related-work} reviews related work on orbital edge computing and dynamic scheduling, identifying the gaps addressed by our framework. Section \ref{sec:methodology} details the simulation environment, topology, workload profiles, and the three strategies. Section \ref{sec:metrics} specifies the evaluation metrics and comparison protocol. Section \ref{sec:experiments} presents experimental results and statistical analysis. Section \ref{sec:conclusion} concludes with limitations and future work directions, including the planned integration of the RL agent (Strategy 5) in Phase 3.
@@ -116,6 +120,8 @@ We implement three allocation strategies and describe two planned for Phase 3. S
 \begin{equation}
     \mathrm{Score} = 0.4 \times \mathrm{CPU}_{\mathrm{suitability}} + 0.4 \times \mathrm{Energy}_{\mathrm{suitability}} + 0.2 \times \mathrm{Communication}_{\mathrm{suitability}}.
 \end{equation}
+Each sub-score is min-max normalized to $[0,1]$ across candidate nodes: $\text{CPU}_{\text{suit}} = 1 - (\rho_{\text{proj}} - \rho_{\min}) / (\rho_{\max} - \rho_{\min})$, where $\rho_{\text{proj}}$ is the projected utilization of the node after assigning the incoming task; energy and communication sub-scores are computed analogously from estimated energy cost and transmission time.
+
 S4 is the planned Dynamic Resilient Scheduler for Phase 3, adding failure detection and re-scheduling of orphaned tasks. S5 is the planned Reinforcement Learning Agent for Phase 3, using PPO/DQN through Stable-Baselines3 \cite{stable-baselines3}.
 
 \subsection{Evaluation Metrics}
