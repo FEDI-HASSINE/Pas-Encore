@@ -29,7 +29,7 @@ Université de Sfax, Tunisia\\
 \maketitle
 
 \begin{abstract}
-The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a simulation-based evaluation of three workload allocation strategies on a fixed topology modeled after realistic orbital-ground infrastructure: two static baselines (Always Ground, Always Orbital) and a greedy heuristic. We implement a discrete-event simulator using SimPy, incorporating a stochastic radiation-induced failure model, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Results show that on the Burst profile the AlwaysOrbital baseline is 3.2 times slower than the Cloud baseline, while the greedy heuristic matches the Cloud baseline on makespan (p=0.60) and maintains balanced load. These findings motivate Phase 3 extensions: topology rebalancing, a Reinforcement Learning agent (PPO), and merged benchmark validation. We release our simulation framework as open-source code.
+The emergence of orbital edge computing platforms such as Starcloud and Suncatcher has created a new paradigm for distributed computation, where heterogeneous nodes---low Earth orbit (LEO) satellites, ground stations, and terrestrial clouds---must collaboratively execute dynamic workloads under intermittent connectivity and stringent energy constraints. This paper presents a simulation-based evaluation of three workload allocation strategies on a fixed topology modeled after realistic orbital-ground infrastructure: two static baselines (Always Ground, Always Orbital) and a greedy heuristic. We implement a discrete-event simulator using SimPy, incorporating a stochastic radiation-induced failure model, PSPLIB task dependencies, Google cluster trace arrival patterns, and Skyfield-computed orbital visibility windows. Our evaluation spans four synthetic workload profiles designed to isolate makespan, load balance, resilience, and efficiency. Preliminary results show that on the Burst profile the AlwaysOrbital baseline is 3.2 times slower than the Cloud baseline, while the Greedy heuristic does not differ significantly from the Cloud baseline on makespan (p=0.60) and maintains balanced load. These findings motivate Phase 3 extensions: topology rebalancing, a Reinforcement Learning agent (PPO), and merged benchmark validation. We release our simulation framework as open-source code.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -47,14 +47,14 @@ Static allocation strategies cannot adapt to these dynamics. By Amdahl's Law \ci
 
 This paper addresses the following research question: \textit{How does a proactive, learning-based allocation strategy compare to reactive heuristics regarding the primary mission metrics (makespan, load balance, resilience, efficiency)? Which strategy best approximates the optimal Pareto frontier between execution time and energy efficiency?}
 
-To answer this question, we make the following contributions:
+To answer this question, we make the following contributions. This paper reports results from Phase 2 of a three-phase project. Phase 3 (starting October 2026) will extend the strategy set with a resilient scheduler and a Reinforcement Learning agent, and will include a full sensitivity and ablation study.
 
 \begin{enumerate}
     \item \textbf{Unified simulation framework:} We implement a discrete-event simulator in SimPy \cite{simpy} that faithfully models a fixed heterogeneous topology (2 LEO satellites, 1 ground station, 1 terrestrial cloud) with realistic link dynamics (periodic visibility, inter-satellite links), energy costs, startup penalties, and sensor noise. The framework enforces identical conditions across all strategies, ensuring that performance differences are attributable solely to the orchestration logic.
     \item \textbf{Three orchestration strategies:} We implement and evaluate three allocation strategies: (1) Always Ground, (2) Always Orbital, and (3) Greedy Heuristic (score-based instantaneous assignment). All strategies share a common abstract interface, enabling fair comparison. Dynamic resilient scheduling and Reinforcement Learning (PPO via Stable-Baselines3 \cite{stable-baselines3}) are planned for Phase 3.
     \item \textbf{Stochastic radiation failure model:} We integrate a physics-inspired radiation model where cumulative dose accumulates at 0.01 rad/s, and time-to-failure for three failure modes (SDC: 17 rad, HBM: 44 rad, SEFI: 5000 rad) is sampled from exponential distributions. This model replaces arbitrary failure injection with a reproducible stochastic process parameterized by characteristic dose.
     \item \textbf{External benchmark integration:} We incorporate three real-world benchmarks: PSPLIB \cite{psplib} for task dependency graphs (precedence constraints), Google cluster traces \cite{google-traces} for autocorrelated arrival patterns, and Skyfield \cite{skyfield} for orbital-mechanics-based link visibility computed from TLE data.
-    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority), each stressing one primary metric. We execute all three strategies across all four profiles with 5 random seeds per cell, compute six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$), and report preliminary comparisons of M$_T$ and M$_L$. Min-max normalization, composite mission score, and Pareto frontier analysis are planned for the full Phase 3 evaluation.
+    \item \textbf{Comprehensive evaluation methodology:} We define four synthetic workload profiles (Burst Heavy, Energy Critical, Radiation-Induced Failures, Mixed Priority), each stressing one primary metric. We execute all three strategies across all four profiles with 5 random seeds per cell, define six metrics (M$_T$, M$_L$, M$_Q$, M$_R$, M$_E$, M$_S$) and report preliminary comparisons of two of them (M$_T$ for Burst, M$_L$ for the remaining profiles); the full metric suite is planned for Phase 3.
 \end{enumerate}
 
 The remainder of this paper is organized as follows. Section \ref{sec:related-work} reviews related work on orbital edge computing and dynamic scheduling, identifying the gaps addressed by our framework. Section \ref{sec:methodology} details the simulation environment, topology, workload profiles, and the three strategies. Section \ref{sec:metrics} specifies the evaluation metrics and comparison protocol. Section \ref{sec:experiments} presents experimental results and statistical analysis. Section \ref{sec:conclusion} concludes with limitations and future work directions, including the planned integration of the RL agent (Strategy 5) in Phase 3.
@@ -106,14 +106,14 @@ This section describes the simulated environment, the allocation strategies, and
 \subsection{System Architecture}
 \label{sec:architecture}
 
-The simulated topology contains four heterogeneous compute nodes: LEO-1, LEO-2, GS-Tunisia, and Cloud-AWS. Each LEO satellite provides 10 CPU units and 32 RAM units with a high startup energy penalty; GS-Tunisia provides 20 CPU units and 64 RAM units with a moderate startup penalty; Cloud-AWS provides 100 CPU units and 256 RAM units with no startup penalty. The simulator is implemented as a SimPy discrete-event model: \texttt{build\_topology()} creates the nodes and links, arriving tasks wait in \texttt{pending\_store}, and the orchestrator repeatedly invokes \texttt{strategy.allocate(task, current\_time)} to select an execution node.
+The simulated topology contains four heterogeneous compute nodes: LEO-1, LEO-2, GS-Tunisia, and Cloud-AWS. Each LEO satellite provides 10 CPU units and 32 RAM units with a high startup energy penalty; GS-Tunisia provides 20 CPU units and 64 RAM units with a moderate startup penalty; Cloud-AWS provides 100 CPU units and 256 RAM units with no startup penalty. Energy consumption for each task is computed as $E = \text{cpu\_units} \times \text{energy\_cost}$, with per-node energy costs of $2.0$ (LEO), $0.5$ (GS-Tunisia), and $0.1$ (Cloud-AWS) energy units per CPU unit. The satellite battery capacity is modeled at 80\% of full charge, and recharge is scheduled during sunlit orbital segments. The simulator is implemented as a SimPy discrete-event model: \texttt{build\_topology()} creates the nodes and links, arriving tasks wait in \texttt{pending\_store}, and the orchestrator repeatedly invokes \texttt{strategy.allocate(task, current\_time)} to select an execution node.
 
 The four communication links are LEO-1~$\leftrightarrow$~GS-Tunisia, LEO-2~$\leftrightarrow$~GS-Tunisia, GS-Tunisia~$\leftrightarrow$~Cloud-AWS, and the LEO-1~$\leftrightarrow$~LEO-2 inter-satellite link. The LEO-ground links provide 10 Mbps during 600-second visibility windows every 5400 seconds, offset between the two satellites; the terrestrial and inter-satellite links provide 100 Mbps and 50 Mbps, respectively, and remain available.
 
 \subsection{Allocation Strategies}
 \label{sec:strategies}
 
-We implement three allocation strategies and describe two planned for Phase 3. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification:
+We implement three allocation strategies and describe two planned for Phase 3. S1, \texttt{AlwaysGroundStrategy}, routes every task to Cloud-AWS. S2, \texttt{AlwaysOrbitalStrategy}, routes every task to LEO-1. S3, \texttt{GreedyStrategy}, computes an instantaneous suitability score from CPU availability, estimated energy cost, and communication cost. The score weights follow the experimental specification provided in the IASTAM 6.0 challenge framework, which assigns priority to compute and energy (0.4 each) over communication (0.2) because the satellite's dominant constraint is onboard resources, not bandwidth; a full sensitivity analysis over the weight space is planned for Phase 3:
 \begin{equation}
   \text{Score} = 0.4 \cdot \text{CPU}_{\text{suit}}
               + 0.4 \cdot \text{Energy}_{\text{suit}}
@@ -155,10 +155,10 @@ S3 (Greedy)        & $171.56 \pm 10.5$ & $0.60$ \\
 \label{tab:burst}
 \end{table}
 
-S2 (AlwaysOrbital) is 3.2$\times$ slower than S1 (Cloud), confirming the LEO satellite's limited capacity ($\mu=10$ CPU units vs 100 for Cloud-AWS). S3 (Greedy) matches S1 on makespan ($p=0.60$): the Greedy score consistently selects Cloud-AWS, which dominates the topology.
+S2 (AlwaysOrbital) is 3.2$\times$ slower than S1 (Cloud), confirming the LEO satellite's limited capacity ($\mu=10$ CPU units vs 100 for Cloud-AWS). S3 (Greedy) shows no significant difference from S1 on makespan ($p = 0.60$, $n=5$ per group, low statistical power); the Greedy score consistently selects Cloud-AWS, which dominates the topology. A formal equivalence test (TOST) and larger sample size are planned for Phase 3.
 
 \paragraph{Energy, Mixed, and Radiation profiles (Load Balance).}
-For the remaining three profiles, tasks arrive over a long window (7200~s, 5000~s, and 3600~s respectively). As a consequence, $M_T$ is dominated by the arrival window and does not discriminate between strategies. We therefore report the load-balance metric $M_L$ (standard deviation of per-node CPU utilization):
+For the remaining three profiles, tasks arrive over a long window (7200~s, 5000~s, and 3600~s respectively). (80 tasks for Radiation, 100 for Energy, and 200 for Mixed, complementing the 150-task Burst profile.) As a consequence, $M_T$ is dominated by the arrival window and does not discriminate between strategies. We therefore report the load-balance metric $M_L$ (standard deviation of per-node CPU utilization):
 
 \begin{table}[h!]
 \centering
@@ -186,28 +186,28 @@ These results are consistent with the design principle stated in Section~\ref{se
 \begin{figure}[h!]
     \centering
     \includegraphics[width=0.75\linewidth]{figures/graph_burst.png}
-    \caption{Burst profile --- Makespan comparison.}
+    \caption{Burst profile --- Makespan $M_T$ in seconds (mean $\pm$ std over 5 seeds); lower is better.}
     \label{fig:graph_burst}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=0.75\linewidth]{figures/graph_energy.png}
-    \caption{Energy profile --- Load balance comparison.}
+    \caption{Energy profile --- Load-balance $M_L$ (std-dev of per-node CPU utilization, unitless); lower is better.}
     \label{fig:graph_energy}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=0.75\linewidth]{figures/graph_mixed.png}
-    \caption{Mixed profile --- Load balance comparison.}
+    \caption{Mixed profile --- Load-balance $M_L$ (std-dev of per-node CPU utilization, unitless); lower is better.}
     \label{fig:graph_mixed}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=0.75\linewidth]{figures/graph_radiation.png}
-    \caption{Radiation profile --- Load balance comparison.}
+    \caption{Radiation profile --- Load-balance $M_L$ (std-dev of per-node CPU utilization, unitless); lower is better.}
     \label{fig:graph_radiation}
 \end{figure}
 
@@ -230,11 +230,11 @@ The PSPLIB parser, the Google trace sampler, and the Skyfield stub are already i
 
 This paper presented a discrete-event simulation framework for dynamic workload allocation between space and ground, and a systematic comparison of three allocation strategies under four controlled workload profiles.
 
-Our empirical findings are threefold. First, on the Burst profile, the AlwaysOrbital baseline is $3.2\times$ slower than the Cloud baseline, confirming the impact of limited satellite CPU capacity on makespan. Second, on the Energy, Mixed, and Radiation profiles, the AlwaysOrbital strategy produces a load-balance metric $M_L$ about $10\times$ higher than Cloud and Greedy, showing that a single-satellite policy systematically overloads the orbital node. Third, the Greedy heuristic matches the Cloud baseline on makespan ($p=0.60$) while keeping load balanced, because the Cloud node dominates the topology.
+Our empirical findings are threefold. First, on the Burst profile, the AlwaysOrbital baseline is $3.2\times$ slower than the Cloud baseline, confirming the impact of limited satellite CPU capacity on makespan. Second, on the Energy, Mixed, and Radiation profiles, the AlwaysOrbital strategy produces a load-balance metric $M_L$ about $10\times$ higher than Cloud and Greedy, showing that a single-satellite policy systematically overloads the orbital node. Third, the Greedy heuristic does not differ significantly from the Cloud baseline on makespan ($p=0.60$) while keeping load balanced, because the Cloud node dominates the topology.
 
 These results are intentionally modest: we do not claim a new algorithm, but rather a reproducible methodology and empirical evidence on the trade-offs between allocation strategies in orbital computing. The framework, the four workload profiles, and the statistical protocol are released as open-source code.
 
-The Greedy heuristic (S3) matches the Cloud baseline (S1) on makespan because Cloud-AWS dominates the topology with 10$\times$ the CPU capacity of LEO satellites. This is not a failure of the Greedy strategy --- it is an empirical finding that motivates Phase 3: rebalancing the topology and using Reinforcement Learning to exploit parallelism across multiple orbital nodes.
+The Greedy heuristic (S3) does not differ significantly from the Cloud baseline (S1) on makespan because Cloud-AWS dominates the topology with 10$\times$ the CPU capacity of LEO satellites. This is not a failure of the Greedy strategy --- it is an empirical finding that motivates Phase 3: rebalancing the topology and using Reinforcement Learning to exploit parallelism across multiple orbital nodes.
 
 \paragraph{Future work (Phase 3).}
 Three extensions are planned. First, we will rebalance the topology so that parallelism across multiple orbital nodes becomes beneficial. Second, we will introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages. Third, we will validate the framework on external benchmarks (PSPLIB task graphs, Google cluster traces, and Skyfield orbital visibility windows) to complement the synthetic profiles used here.
