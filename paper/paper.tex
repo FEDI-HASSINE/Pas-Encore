@@ -7,6 +7,7 @@
 \usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{multirow}
+\usepackage{url}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
@@ -19,7 +20,7 @@
 \IEEEauthorblockA{
 \textit{Institut Supérieur d'Informatique et de Multimédia de Sfax (ISIMS)}\\
 Université de Sfax, Tunisia\\
-\textit{IASTAM 6.0 Project 6}\\
+\textit{IASTAM 6.0 --- Track 3: Orbital Computing Architecture --- Problem 6}\\
 \{fedi.hassine, yassine.benayed, mohsen.bellaaj, achour.yassin\}@isimsf.u-sfax.tn
 }
 }
@@ -135,7 +136,7 @@ The Burst profile delivers 150 tasks simultaneously at $t=0$. The makespan $M_T$
 
 \begin{table}[h!]
 \centering
-\caption{Burst profile --- Makespan ($M_T$, seconds).}
+\caption{Burst profile --- Makespan ($M_T$, seconds). $p$-values from a two-sided Student's $t$-test ($\alpha=0.05$, $n=5$ per strategy).}
 \begin{tabular}{l c c}
 \toprule
 \textbf{Strategy} & \textbf{$M_T$ mean $\pm$ std} & \textbf{$p$-value vs S1} \\
@@ -170,6 +171,9 @@ Radiation & 0.012 & 0.119 & 0.012 \\
 
 The AlwaysOrbital baseline (S2) overloads the single LEO-1 node, yielding an $M_L$ about $10\times$ higher than S1 and S3. Both Cloud and Greedy maintain a well-balanced utilization across nodes.
 
+\paragraph{Limitation on $M_R$.}
+The Radiation profile was designed to stress resilience ($M_R$). In this interim evaluation, $M_R$ telemetry was not fully aggregated across the 60 runs; we report $M_L$ as a proxy for the profile's operational quality. Full $M_R$ analysis is scheduled for Phase 3, where failure event logs will be fully instrumented.
+
 \paragraph{Discussion.}
 These results are consistent with the design principle stated in Section~\ref{sec:methodology}: no single strategy dominates on all metrics. Cloud minimizes latency but concentrates all work on a single node; AlwaysOrbital minimizes transmission but saturates the satellite; Greedy provides a balanced trade-off that matches Cloud on makespan while keeping load balanced. This empirical evidence motivates Phase 3, where we plan to (i) rebalance the topology to make orbital parallelism beneficial, and (ii) introduce a Reinforcement Learning agent (PPO) trained to anticipate network disconnections and energy shortages.
 
@@ -200,6 +204,9 @@ These results are consistent with the design principle stated in Section~\ref{se
     \caption{Radiation profile --- Load balance comparison.}
     \label{fig:graph_radiation}
 \end{figure}
+
+\paragraph{Reproducibility.}
+The simulation framework, the four workload profiles, and the eight result CSVs are publicly available at \url{https://github.com/FEDI-HASSINE/Pas-Encore}. The automated test suite (143 tests) can be run with \texttt{pytest tests/}.
 
 \subsection{External Benchmarks (Phase 3 Roadmap)}
 \label{sec:external-benchmarks}
